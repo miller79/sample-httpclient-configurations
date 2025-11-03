@@ -1,0 +1,3 @@
+miller79:
+  apache:
+    response-timeout: 10s
