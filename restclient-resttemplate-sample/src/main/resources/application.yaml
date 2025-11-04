@@ -1,3 +1,9 @@
 miller79:
   apache:
     response-timeout: 10s
+    
+spring:
+  http:
+    client:
+      read-timeout: 17s
+      connect-timeout: 16s

@@ -12,8 +12,9 @@ import org.springframework.web.client.RestClient;
  * for new applications.
  * 
  * <p>This configuration creates a RestClient instance that uses the custom Apache HttpClient
- * configured in {@link ApacheHttpClientConfiguration}. This means all HTTP requests made
- * through this RestClient will benefit from:
+ * configured in {@link ApacheHttpClientConfiguration}. Spring Boot 3.4+ automatically applies
+ * the {@link org.springframework.boot.autoconfigure.http.client.ClientHttpRequestFactoryBuilderCustomizer}
+ * to all RestClient.Builder instances, so all HTTP requests made through this RestClient will benefit from:
  * <ul>
  *   <li>Connection pooling for improved performance</li>
  *   <li>Configured timeout settings for reliability</li>
@@ -41,10 +42,12 @@ import org.springframework.web.client.RestClient;
 public class RestClientConfiguration {
     
     /**
-     * Creates a {@link RestClient} bean using the custom-configured RestClient.Builder.
+     * Creates a {@link RestClient} bean using the auto-configured RestClient.Builder.
      * 
-     * <p>The RestClient.Builder is automatically customized by {@link ApacheHttpClientConfiguration}
-     * to use the pooled Apache HttpClient with all configured timeout and keep-alive settings.
+     * <p>The RestClient.Builder is automatically configured by Spring Boot 3.4+ using the
+     * {@link org.springframework.boot.autoconfigure.http.client.ClientHttpRequestFactoryBuilderCustomizer}
+     * bean from {@link ApacheHttpClientConfiguration}. This means the RestClient will use the
+     * Apache HttpClient with all configured timeout, connection pool, and keep-alive settings.
      * 
      * <p>This bean can be injected anywhere in the application to make HTTP requests with
      * the configured client settings.

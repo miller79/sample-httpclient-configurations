@@ -1,20 +1,12 @@
 package miller79;
 
 import org.apache.hc.client5.http.config.ConnectionConfig;
-import org.apache.hc.client5.http.config.RequestConfig;
-import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
-import org.apache.hc.client5.http.impl.classic.HttpClients;
-import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManagerBuilder;
-import org.apache.hc.client5.http.io.HttpClientConnectionManager;
-import org.apache.hc.core5.http.io.SocketConfig;
 import org.apache.hc.core5.util.TimeValue;
 import org.apache.hc.core5.util.Timeout;
-import org.springframework.boot.autoconfigure.web.client.RestTemplateBuilderConfigurer;
-import org.springframework.boot.web.client.RestClientCustomizer;
-import org.springframework.boot.web.client.RestTemplateBuilder;
+import org.springframework.boot.autoconfigure.http.client.ClientHttpRequestFactoryBuilderCustomizer;
+import org.springframework.boot.http.client.HttpComponentsClientHttpRequestFactoryBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
 
 import lombok.RequiredArgsConstructor;
 
@@ -56,156 +48,77 @@ public class ApacheHttpClientConfiguration {
     private final ApacheHttpClientConfigurationProperties apacheHttpClientConfigurationProperties;
 
     /**
-     * Creates a configured {@link CloseableHttpClient} with connection pooling and
-     * custom timeout settings.
+     * Creates a {@link ClientHttpRequestFactoryBuilderCustomizer} for Apache HttpClient 5.
      * 
-     * <p>
-     * This client is configured with:
+     * <p>This customizer is automatically applied by Spring Boot 3.4+ to configure both RestClient
+     * and RestTemplate instances with custom HTTP client settings. It configures:
      * <ul>
-     * <li><b>Request Configuration:</b> Controls response timeout behavior</li>
-     * <li><b>Socket Configuration:</b> Manages TCP keep-alive settings at the
-     * socket level</li>
-     * <li><b>Connection Configuration:</b> Defines connection lifecycle
-     * (time-to-live)</li>
-     * <li><b>Connection Pool:</b> Manages a pool of reusable HTTP connections</li>
-     * <li><b>Automatic Eviction:</b> Removes expired and idle connections
-     * automatically</li>
+     *   <li><b>Request Configuration:</b> Controls response timeout behavior</li>
+     *   <li><b>Socket Configuration:</b> Manages TCP keep-alive settings at the socket level</li>
+     *   <li><b>Connection Configuration:</b> Defines connection lifecycle (time-to-live and validation)</li>
+     *   <li><b>Connection Manager:</b> Manages a pool of reusable HTTP connections</li>
+     *   <li><b>HTTP Client Customization:</b> Enables automatic eviction of expired and idle connections</li>
      * </ul>
      * 
-     * <p>
-     * <b>Timeout Hierarchy:</b>
-     * <ol>
-     * <li>Response Timeout - Maximum time to wait for server response</li>
-     * <li>Socket Timeout (SO_TIMEOUT) - Socket-level read timeout (matches response
-     * timeout)</li>
-     * <li>Connection Time-to-Live - Maximum lifetime of a connection in the
-     * pool</li>
-     * <li>Idle Eviction - Connections idle longer than this are removed from
-     * pool</li>
-     * </ol>
+     * <p><b>Timeout Configuration:</b>
+     * <ul>
+     *   <li><b>Response Timeout:</b> Maximum time to wait for server response</li>
+     *   <li><b>Connection Time-to-Live:</b> Maximum lifetime of a connection in the pool</li>
+     *   <li><b>Validate After Inactivity:</b> Time before a connection is validated before reuse</li>
+     *   <li><b>Idle Eviction:</b> Connections idle longer than this are removed from pool</li>
+     * </ul>
      * 
-     * <p>
-     * <b>Keep-Alive Strategy:</b><br>
-     * TCP keep-alive probes are configured to detect broken connections. The kernel
-     * sends probes after {@code tcpKeepIdle} seconds of inactivity, then sends
-     * {@code tcpKeepCount} probes every {@code tcpKeepInterval} seconds. If all
-     * probes fail, the connection is considered dead.
+     * <p><b>Keep-Alive Strategy:</b><br>
+     * TCP keep-alive probes are configured to detect broken connections. The kernel sends probes
+     * after {@code tcpKeepIdle} seconds of inactivity, then sends {@code tcpKeepCount} probes
+     * every {@code tcpKeepInterval} seconds. If all probes fail, the connection is considered dead.
      * 
-     * <p>
-     * <b>Connection Pool:</b><br>
-     * The pool manages a maximum of {@code maxConnections} total connections across
-     * all routes. Connections are reused for multiple requests to improve
-     * performance and reduce the overhead of establishing new connections.
+     * <p><b>Connection Pool:</b><br>
+     * The pool manages a maximum of {@code maxConnections} total connections across all routes.
+     * Connections are reused for multiple requests to improve performance and reduce the overhead
+     * of establishing new connections.
      * 
-     * @return a fully configured CloseableHttpClient with connection pooling
-     * @see RequestConfig for request-level timeout configuration
-     * @see SocketConfig for socket-level TCP settings
-     * @see ConnectionConfig for connection lifecycle management
-     * @see PoolingHttpClientConnectionManagerBuilder for connection pool
-     *      configuration
+     * <p><b>Auto-Configuration:</b><br>
+     * Spring Boot automatically applies this customizer to all RestClient.Builder and RestTemplateBuilder
+     * instances in the application context. The customizer uses a fluent builder API to configure
+     * each aspect of the HTTP client separately.
+     * 
+     * @return a ClientHttpRequestFactoryBuilderCustomizer for Apache HttpClient 5
+     * @see ClientHttpRequestFactoryBuilderCustomizer for Spring Boot 3.4+ customization pattern
+     * @see HttpComponentsClientHttpRequestFactoryBuilder for Apache HttpClient 5 builder
+     * @see org.apache.hc.client5.http.config.RequestConfig for request-level timeout configuration
+     * @see org.apache.hc.core5.http.io.SocketConfig for socket-level TCP settings
+     * @see org.apache.hc.client5.http.config.ConnectionConfig for connection lifecycle management
      */
     @Bean
-    CloseableHttpClient pooledHttpClient() {
-        // Configure request-level timeouts
-        RequestConfig requestConfig = RequestConfig
-                .custom()
-                .setResponseTimeout(Timeout.of(apacheHttpClientConfigurationProperties.getResponseTimeout()))
-                .build();
-
-        // Configure socket-level TCP keep-alive settings
-        SocketConfig socketConfig = SocketConfig
-                .custom()
-                .setSoKeepAlive(apacheHttpClientConfigurationProperties.isSoKeepAlive())
-                .setTcpKeepCount(apacheHttpClientConfigurationProperties.getTcpKeepCount())
-                .setTcpKeepIdle(apacheHttpClientConfigurationProperties.getTcpKeepIdle().toSecondsPart())
-                .setTcpKeepInterval(apacheHttpClientConfigurationProperties.getTcpKeepInterval().toSecondsPart())
-                .build();
-
-        // Configure connection lifecycle
+    ClientHttpRequestFactoryBuilderCustomizer<HttpComponentsClientHttpRequestFactoryBuilder> apacheHttpClientTuning() {
+        // Configure connection lifecycle (time-to-live and validation)
         ConnectionConfig connectionConfig = ConnectionConfig
                 .custom()
                 .setTimeToLive(Timeout.of(apacheHttpClientConfigurationProperties.getMaxLifeTime()))
                 .setValidateAfterInactivity(Timeout.of(apacheHttpClientConfigurationProperties.getMaxIdleTime()))
                 .build();
 
-        // Create connection pool with configurations
-        HttpClientConnectionManager httpClientConnectionManager = PoolingHttpClientConnectionManagerBuilder
-                .create()
-                .setMaxConnTotal(apacheHttpClientConfigurationProperties.getMaxConnections())
-                .setDefaultConnectionConfig(connectionConfig)
-                .setDefaultSocketConfig(socketConfig)
-                .build();
-
-        // Build the HTTP client with all configurations
-        return HttpClients
-                .custom()
-                .setConnectionManager(httpClientConnectionManager)
-                .evictExpiredConnections()
-                .evictIdleConnections(TimeValue.of(apacheHttpClientConfigurationProperties.getMaxIdleTime()))
-                .setDefaultRequestConfig(requestConfig)
-                .build();
+        // Return customizer with fluent builder configuration
+        return builder -> builder
+                // Configure request-level timeouts (response timeout)
+                .withDefaultRequestConfigCustomizer(rcb -> rcb
+                        .setResponseTimeout(Timeout.of(apacheHttpClientConfigurationProperties.getResponseTimeout())))
+                // Configure socket-level TCP keep-alive settings
+                .withSocketConfigCustomizer(scb -> scb
+                        .setSoKeepAlive(apacheHttpClientConfigurationProperties.isSoKeepAlive())
+                        .setTcpKeepCount(apacheHttpClientConfigurationProperties.getTcpKeepCount())
+                        .setTcpKeepIdle(apacheHttpClientConfigurationProperties.getTcpKeepIdle().toSecondsPart())
+                        .setTcpKeepInterval(
+                                apacheHttpClientConfigurationProperties.getTcpKeepInterval().toSecondsPart()))
+                // Configure connection pool with max connections and lifecycle
+                .withConnectionManagerCustomizer(cmb -> cmb
+                        .setMaxConnTotal(apacheHttpClientConfigurationProperties.getMaxConnections())
+                        .setDefaultConnectionConfig(connectionConfig))
+                // Configure HTTP client to evict expired and idle connections
+                .withHttpClientCustomizer(hcb -> hcb
+                        .evictExpiredConnections()
+                        .evictIdleConnections(TimeValue.of(apacheHttpClientConfigurationProperties.getMaxIdleTime())));
     }
 
-    /**
-     * Creates a {@link RestClientCustomizer} that configures all RestClient.Builder
-     * instances to use the custom {@link CloseableHttpClient}.
-     * 
-     * <p>
-     * This customizer is automatically applied to any
-     * {@link org.springframework.web.client.RestClient.Builder} bean in the
-     * application context. It replaces the default HTTP client with our pooled,
-     * timeout-configured client.
-     * 
-     * <p>
-     * <b>Usage:</b> Any RestClient.Builder injected into your beans will
-     * automatically use the configured HTTP client with all the custom timeout and
-     * pooling settings.
-     * 
-     * @param pooledHttpClient the configured Apache HttpClient
-     * @return a RestClientCustomizer that applies the custom HTTP client
-     * @see org.springframework.web.client.RestClient
-     * @see HttpComponentsClientHttpRequestFactory
-     */
-    @Bean
-    RestClientCustomizer restClientBuilderCustomizer(CloseableHttpClient pooledHttpClient) {
-        return builder -> builder.requestFactory(new HttpComponentsClientHttpRequestFactory(pooledHttpClient));
-    }
-
-    /**
-     * Creates a {@link RestTemplateBuilder} configured to use the custom
-     * {@link CloseableHttpClient}.
-     * 
-     * <p>
-     * This builder is automatically injected with Spring Boot's default
-     * configuration via {@link RestTemplateBuilderConfigurer}, and then customized
-     * to use our pooled HTTP client instead of the default client.
-     * 
-     * <p>
-     * <b>Usage:</b> Inject this RestTemplateBuilder into your beans to create
-     * RestTemplate instances that use the custom HTTP client:
-     * 
-     * <pre>{@code
-     * @Autowired
-     * private RestTemplateBuilder restTemplateBuilder;
-     * 
-     * public void someMethod() {
-     *     RestTemplate restTemplate = restTemplateBuilder.build();
-     *     // Use restTemplate with custom timeout and pooling settings
-     * }
-     * }</pre>
-     * 
-     * @param configurer       Spring Boot's default RestTemplateBuilder configurer
-     * @param pooledHttpClient the configured Apache HttpClient
-     * @return a RestTemplateBuilder with custom HTTP client configuration
-     * @see org.springframework.web.client.RestTemplate
-     * @see HttpComponentsClientHttpRequestFactory
-     */
-    @Bean
-    RestTemplateBuilder restTemplateBuilder(
-            RestTemplateBuilderConfigurer configurer,
-            CloseableHttpClient pooledHttpClient) {
-        return configurer
-                .configure(new RestTemplateBuilder())
-                .requestFactory(() -> new HttpComponentsClientHttpRequestFactory(pooledHttpClient));
-    }
 }

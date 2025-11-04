@@ -1,3 +1,8 @@
 miller79:
   reactor:
     name: "my-reactor"
+spring:
+  http:
+    reactiveclient:
+      connect-timeout: 16s
+      read-timeout: 17s

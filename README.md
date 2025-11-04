@@ -9,6 +9,12 @@ This repository provides working examples of configuring low-level HTTP client s
 - **Apache HttpClient 5** - Used by `RestTemplate` and `RestClient`
 - **Reactor Netty** - Used by `WebClient`
 
+These samples demonstrate Spring Boot 3.4+ features including:
+- `ClientHttpRequestFactoryBuilderCustomizer` for unified HTTP client configuration
+- `ClientHttpConnectorBuilderCustomizer` for reactive HTTP client configuration
+- Externalized configuration properties for all timeout and connection pool settings
+- Fluent builder API for customizing HTTP clients without replacing entire beans
+
 ## Repository Structure
 
 ```
@@ -35,25 +41,26 @@ The `restclient-resttemplate-sample` demonstrates how to configure:
 
 ### Connection Pool Settings
 - **Max Total Connections**: Total connections across all routes
-- **Max Per Route**: Maximum connections per host:port combination
+- **Max Connections Per Route**: Configured via connection manager
 
 ### Timeout Configuration
-- **Connect Timeout**: Time to establish TCP connection
-- **Connection Request Timeout**: Time to acquire connection from pool
 - **Response Timeout**: Time to wait for response data
-- **Socket Timeout**: Socket-level read timeout
+- **Socket Timeout**: Socket-level read timeout (set via SocketConfig)
+- **Time-to-Live**: Maximum lifetime of a connection
+- **Validate After Inactivity**: When to validate connections before reuse
 
 ### Keep-Alive Settings
-- **Keep-Alive Strategy**: Determines how long to keep idle connections
-- **Time-to-Live**: Maximum lifetime of a connection
-- **Validate After Inactivity**: When to validate stale connections
+- **TCP Keep-Alive**: Socket-level keep-alive configuration
+- **TCP Keep Idle**: Time before first keep-alive probe
+- **TCP Keep Interval**: Time between keep-alive probes
+- **TCP Keep Count**: Number of failed probes before connection is dead
 - **Idle Eviction**: Automatic cleanup of idle connections
 
 ### Key Classes
-- `ApacheHttpClientConfiguration.java` - Bean configuration for Apache HttpClient
+- `ApacheHttpClientConfiguration.java` - Creates `ClientHttpRequestFactoryBuilderCustomizer` bean
 - `ApacheHttpClientConfigurationProperties.java` - Externalized configuration properties
-- `RestTemplateConfiguration.java` - RestTemplate setup using configured client
-- `RestClientConfiguration.java` - RestClient setup using configured client
+- `RestTemplateConfiguration.java` - RestTemplate setup (auto-configured via customizer)
+- `RestClientConfiguration.java` - RestClient setup (auto-configured via customizer)
 
 ## Reactor Netty Configuration (WebClient)
 
@@ -74,9 +81,9 @@ The `webclient-sample` demonstrates how to configure:
 - **Response Timeout**: Maximum time to wait for response
 
 ### Key Classes
-- `ReactorHttpClientConfiguration.java` - Bean configuration for Reactor Netty
+- `ReactorHttpClientConfiguration.java` - Creates `ClientHttpConnectorBuilderCustomizer` bean
 - `ReactorHttpClientConfigurationProperties.java` - Externalized configuration properties
-- `WebClientConfiguration.java` - WebClient setup using configured connector
+- `WebClientConfiguration.java` - WebClient setup (auto-configured via customizer)
 
 ## Configuration Properties
 
@@ -84,29 +91,32 @@ Both samples support externalized configuration via `application.yml` or `applic
 
 ### Apache HttpClient Example
 ```yaml
-apache:
-  httpclient:
-    server-idle-timeout: 5m
-    connect-timeout: 10s
-    response-timeout: 60s
-    connection-request-timeout: 5s
-    pool-max-connections: 64
-    pool-max-per-route: 32
-```
-
-### Reactor Netty Example
-```yaml
-reactor:
-  httpclient:
-    name: webclient-connection
-    max-connections: 64
+miller79:
+  apache:
+    name: my-http-client
+    max-connections: 100
     max-idle-time: 60s
-    max-life-time: 60s
-    response-timeout: 5s
+    max-life-time: 120s
     so-keep-alive: true
     tcp-keep-idle: 30s
     tcp-keep-interval: 5s
     tcp-keep-count: 3
+    response-timeout: 10s
+```
+
+### Reactor Netty Example
+```yaml
+miller79:
+  reactor:
+    name: my-webclient
+    max-connections: 100
+    max-idle-time: 60s
+    max-life-time: 120s
+    so-keep-alive: true
+    tcp-keep-idle: 30s
+    tcp-keep-interval: 5s
+    tcp-keep-count: 3
+    response-timeout: 10s
 ```
 
 ## Why This Matters
@@ -120,42 +130,70 @@ Default HTTP client configurations may not be suitable for production environmen
 
 ## Key Considerations
 
+### Spring Boot 3.4+ Features
+This repository uses Spring Boot 3.4+ features:
+- **ClientHttpRequestFactoryBuilderCustomizer**: Customizes HTTP client factory builders for blocking clients (Apache, JDK, etc.)
+- **ClientHttpConnectorBuilderCustomizer**: Customizes HTTP connector builders for reactive clients (Reactor Netty, Jetty, etc.)
+- **Fluent Builder API**: Each customizer receives a builder with methods like `withSocketConfigCustomizer()`, `withHttpClientCustomizer()`, etc.
+- **Auto-Configuration**: Customizers are automatically applied to all RestClient, RestTemplate, and WebClient instances
+
 ### Timeout Hierarchy
 Timeouts should be configured in a cascading manner:
-1. **Connect Timeout** < **Response Timeout**
+1. **Response Timeout** - Maximum time for complete request/response
 2. **Connection TTL** < **Server Idle Timeout**
-3. **Keep-Alive Duration** < **Server Idle Timeout**
+3. **Validate After Inactivity** - Check connection health before reuse
 
 ### Connection Pool Sizing
 - Base pool size on expected concurrent requests
 - Consider target server capacity and rate limits
 - Monitor pool exhaustion and adjust accordingly
+- Reactive applications need smaller pools than blocking applications
 
 ### Keep-Alive Strategy
 - Set client keep-alive shorter than server timeout
 - Validate connections after periods of inactivity
 - Evict idle connections to free resources
+- TCP keep-alive options are platform-specific (Linux only for some settings)
 
 ## Running the Samples
 
 Each sample is a standalone Spring Boot application:
 
 ```bash
-# Run Apache HttpClient sample
+# Run Apache HttpClient sample (Windows PowerShell)
+cd restclient-resttemplate-sample
+.\mvnw.cmd spring-boot:run
+
+# Run Reactor Netty sample (Windows PowerShell)
+cd webclient-sample
+.\mvnw.cmd spring-boot:run
+```
+
+```bash
+# Run Apache HttpClient sample (Linux/Mac)
 cd restclient-resttemplate-sample
 ./mvnw spring-boot:run
 
-# Run Reactor Netty sample
+# Run Reactor Netty sample (Linux/Mac)
 cd webclient-sample
 ./mvnw spring-boot:run
 ```
 
 ## Additional Resources
 
+- [Spring Boot 3.4 Release Notes](https://github.com/spring-projects/spring-boot/wiki/Spring-Boot-3.4-Release-Notes)
 - [Apache HttpClient 5 Documentation](https://hc.apache.org/httpcomponents-client-5.3.x/)
 - [Reactor Netty Reference Guide](https://projectreactor.io/docs/netty/release/reference/)
 - [Spring WebClient Documentation](https://docs.spring.io/spring-framework/reference/web/webflux-webclient.html)
 - [Spring RestClient Documentation](https://docs.spring.io/spring-framework/reference/integration/rest-clients.html)
+- [ClientHttpRequestFactoryBuilderCustomizer JavaDoc](https://docs.spring.io/spring-boot/api/java/org/springframework/boot/autoconfigure/http/client/ClientHttpRequestFactoryBuilderCustomizer.html)
+- [ClientHttpConnectorBuilderCustomizer JavaDoc](https://docs.spring.io/spring-boot/api/java/org/springframework/boot/autoconfigure/http/client/reactive/ClientHttpConnectorBuilderCustomizer.html)
+
+## Requirements
+
+- Java 17 or later
+- Spring Boot 3.4 or later
+- Maven 3.6 or later
 
 ## License
 

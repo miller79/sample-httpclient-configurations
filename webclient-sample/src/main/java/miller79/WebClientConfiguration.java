@@ -12,12 +12,12 @@ import org.springframework.web.reactive.function.client.WebClient;
  * reactive applications using Project Reactor.
  * 
  * <p>This configuration creates a WebClient instance that uses the custom Reactor Netty
- * HTTP client configured in {@link ReactorHttpClientConfiguration}. This means all HTTP
- * requests made through this WebClient will benefit from:
+ * HTTP client configured in {@link ReactorHttpClientConfiguration}. Spring Boot 3.4+
+ * automatically applies the {@link org.springframework.boot.autoconfigure.http.client.reactive.ClientHttpConnectorBuilderCustomizer}
+ * to all WebClient.Builder instances, so all HTTP requests made through this WebClient will benefit from:
  * <ul>
  *   <li>Non-blocking I/O for high throughput with minimal threads</li>
  *   <li>Connection pooling optimized for reactive workloads</li>
- *   <li>Configured timeout settings for reliability</li>
  *   <li>TCP keep-alive for connection health monitoring</li>
  *   <li>Automatic eviction of idle/expired connections</li>
  * </ul>
@@ -64,11 +64,12 @@ import org.springframework.web.reactive.function.client.WebClient;
 public class WebClientConfiguration {
     
     /**
-     * Creates a {@link WebClient} bean using the custom-configured WebClient.Builder.
+     * Creates a {@link WebClient} bean using the auto-configured WebClient.Builder.
      * 
-     * <p>The WebClient.Builder is automatically customized by {@link ReactorHttpClientConfiguration}
-     * to use the configured Reactor Netty HTTP client with all timeout, keep-alive, and
-     * connection pooling settings.
+     * <p>The WebClient.Builder is automatically configured by Spring Boot 3.4+ using the
+     * {@link org.springframework.boot.autoconfigure.http.client.reactive.ClientHttpConnectorBuilderCustomizer}
+     * bean from {@link ReactorHttpClientConfiguration}. This means the WebClient will use the
+     * configured Reactor Netty HTTP client with all timeout, keep-alive, and connection pooling settings.
      * 
      * <p>This bean can be injected anywhere in the application to make reactive HTTP requests
      * with the configured client settings.
