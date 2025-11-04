@@ -13,8 +13,12 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class SampleImplementation implements CommandLineRunner {
     private static final String MAIN_URL = "https://www.google.com";
+    
     private final RestClient sampleRestClient;
     private final RestTemplate sampleRestTemplate;
+
+    private final RestClient sampleRestClientWithAuth;
+    private final RestTemplate sampleRestTemplateWithAuth;
 
     @Override
     public void run(String... args) throws Exception {

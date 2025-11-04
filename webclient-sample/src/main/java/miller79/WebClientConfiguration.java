@@ -61,7 +61,7 @@ import org.springframework.web.reactive.function.client.WebClient;
  * @see reactor.core.publisher.Flux
  */
 @Configuration
-public class WebClientConfiguration {
+class WebClientConfiguration {
     
     /**
      * Creates a {@link WebClient} bean using the auto-configured WebClient.Builder.

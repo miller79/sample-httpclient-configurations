@@ -44,7 +44,7 @@ import lombok.RequiredArgsConstructor;
  */
 @Configuration
 @RequiredArgsConstructor
-public class ApacheHttpClientConfiguration {
+class ApacheHttpClientConfiguration {
     private final ApacheHttpClientConfigurationProperties apacheHttpClientConfigurationProperties;
 
     /**
