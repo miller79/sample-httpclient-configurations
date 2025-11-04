@@ -23,8 +23,10 @@ sample-httpclient-configurations/
 │   └── src/main/java/miller79/
 │       ├── ApacheHttpClientConfiguration.java
 │       ├── ApacheHttpClientConfigurationProperties.java
+│       ├── SecurityConfiguration.java
 │       ├── RestClientConfiguration.java
 │       ├── RestTemplateConfiguration.java
+│       ├── Application.java
 │       └── SampleImplementation.java
 │
 └── webclient-sample/                    # Reactor Netty configuration
@@ -32,6 +34,7 @@ sample-httpclient-configurations/
         ├── ReactorHttpClientConfiguration.java
         ├── ReactorHttpClientConfigurationProperties.java
         ├── WebClientConfiguration.java
+        ├── Application.java
         └── SampleImplementation.java
 ```
 
@@ -59,8 +62,11 @@ The `restclient-resttemplate-sample` demonstrates how to configure:
 ### Key Classes
 - `ApacheHttpClientConfiguration.java` - Creates `ClientHttpRequestFactoryBuilderCustomizer` bean
 - `ApacheHttpClientConfigurationProperties.java` - Externalized configuration properties
-- `RestTemplateConfiguration.java` - RestTemplate setup (auto-configured via customizer)
-- `RestClientConfiguration.java` - RestClient setup (auto-configured via customizer)
+- `SecurityConfiguration.java` - OAuth2 client credentials authentication setup
+- `RestClientConfiguration.java` - RestClient setup (with and without OAuth2 authentication)
+- `RestTemplateConfiguration.java` - RestTemplate setup (with and without OAuth2 authentication)
+- `Application.java` - Spring Boot application entry point
+- `SampleImplementation.java` - Demonstration of configured clients
 
 ## Reactor Netty Configuration (WebClient)
 
@@ -84,6 +90,8 @@ The `webclient-sample` demonstrates how to configure:
 - `ReactorHttpClientConfiguration.java` - Creates `ClientHttpConnectorBuilderCustomizer` bean
 - `ReactorHttpClientConfigurationProperties.java` - Externalized configuration properties
 - `WebClientConfiguration.java` - WebClient setup (auto-configured via customizer)
+- `Application.java` - Spring Boot application entry point
+- `SampleImplementation.java` - Demonstration of configured WebClient
 
 ## Configuration Properties
 
@@ -118,6 +126,36 @@ miller79:
     tcp-keep-count: 3
     response-timeout: 10s
 ```
+
+### OAuth2 Client Credentials Configuration (Optional)
+
+The `restclient-resttemplate-sample` includes OAuth2 client credentials authentication support. To use the authenticated RestClient and RestTemplate beans, configure OAuth2 in `application.yml`:
+
+```yaml
+spring:
+  security:
+    oauth2:
+      client:
+        registration:
+          serviceAccount:
+            client-id: your-client-id
+            client-secret: your-client-secret
+            authorization-grant-type: client_credentials
+            scope: api.read,api.write
+        provider:
+          serviceAccount:
+            token-uri: https://auth.example.com/oauth/token
+```
+
+This configuration enables:
+- **Automatic Token Management**: OAuth2 tokens are automatically obtained and refreshed
+- **Token Caching**: Tokens are cached and reused until expiration
+- **Configured HTTP Client**: Token requests use the same customized Apache HttpClient settings
+- **Service-to-Service Auth**: Ideal for microservice authentication scenarios
+
+The OAuth2 setup is handled by `SecurityConfiguration.java`, which provides:
+- `sampleRestClientWithAuth` - RestClient with OAuth2 bearer token authentication
+- `sampleRestTemplateWithAuth` - RestTemplate with OAuth2 bearer token authentication
 
 ## Why This Matters
 
