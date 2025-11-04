@@ -14,12 +14,17 @@ import lombok.extern.slf4j.Slf4j;
  * WebClient with the custom Reactor Netty HTTP client configuration. It shows
  * that the configured client works correctly for making reactive HTTP requests.
  * 
- * <p><b>Reactive HTTP Client:</b><br>
- * The {@link #sampleWebClient} uses non-blocking I/O via Reactor Netty, which
- * means it doesn't tie up threads waiting for HTTP responses. This allows handling
- * many concurrent requests efficiently.
+ * <p><b>Reactive HTTP Clients:</b>
+ * <ul>
+ *   <li>{@link #sampleWebClient} - WebClient without authentication</li>
+ *   <li>{@link #sampleWebClientWithAuth} - WebClient with OAuth2 authentication</li>
+ * </ul>
  * 
- * <p>The client inherits custom Reactor Netty configuration from
+ * <p>Both clients use non-blocking I/O via Reactor Netty, which means they don't
+ * tie up threads waiting for HTTP responses. This allows handling many concurrent
+ * requests efficiently.
+ * 
+ * <p>The clients inherit custom Reactor Netty configuration from
  * {@link ReactorHttpClientConfiguration}, including:
  * <ul>
  *   <li>Connection pooling (default 64 connections)</li>
@@ -28,6 +33,9 @@ import lombok.extern.slf4j.Slf4j;
  *   <li>Background connection eviction</li>
  * </ul>
  * 
+ * <p>The authenticated variant also includes OAuth2 token management from
+ * {@link SecurityConfiguration}.
+ * 
  * <p><b>Blocking Note:</b><br>
  * This example uses {@code .block()} to wait for the response, which is acceptable
  * for this CommandLineRunner demonstration. In a real reactive application, you would
@@ -35,14 +43,16 @@ import lombok.extern.slf4j.Slf4j;
  * 
  * @see WebClientConfiguration
  * @see ReactorHttpClientConfiguration
+ * @see SecurityConfiguration
  * @see reactor.core.publisher.Mono
  */
 @Component
 @RequiredArgsConstructor
 @Slf4j
-public class SampleImplementation implements CommandLineRunner {
+class SampleImplementation implements CommandLineRunner {
     private static final String MAIN_URL = "https://www.google.com";
     private final WebClient sampleWebClient;
+    private final WebClient sampleWebClientWithAuth;
 
     /**
      * Executes a sample HTTP request on application startup to demonstrate the configured WebClient.

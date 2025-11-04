@@ -2,6 +2,17 @@ miller79:
   reactor:
     name: "my-reactor"
 spring:
+  security:
+    oauth2:
+      client:
+        provider:
+          serviceAccount:
+            issuer-uri: ${ISSUER_URI:https://accounts.google.com}
+        registration:
+          serviceAccount:
+            client-id: ${CLIENT_ID}
+            client-secret: ${CLIENT_SECRET}
+            authorization-grant-type: client_credentials
   http:
     reactiveclient:
       connector: reactor

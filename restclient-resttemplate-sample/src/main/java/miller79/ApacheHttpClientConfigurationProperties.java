@@ -68,7 +68,7 @@ import lombok.Data;
  */
 @ConfigurationProperties("miller79.apache")
 @Data
-public class ApacheHttpClientConfigurationProperties {
+class ApacheHttpClientConfigurationProperties {
     /**
      * Maximum number of total connections in the pool across all routes (host:port
      * combinations).

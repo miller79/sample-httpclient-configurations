@@ -43,7 +43,7 @@ import lombok.extern.slf4j.Slf4j;
 @Component
 @RequiredArgsConstructor
 @Slf4j
-public class SampleImplementation implements CommandLineRunner {
+class SampleImplementation implements CommandLineRunner {
     private static final String MAIN_URL = "https://www.google.com";
     
     private final RestClient sampleRestClient;

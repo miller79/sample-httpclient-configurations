@@ -34,15 +34,19 @@ import org.springframework.web.client.RestClient;
  *   security:
  *     oauth2:
  *       client:
+ *         provider:
+ *           serviceAccount:
+ *             issuer-uri: https://accounts.google.com
  *         registration:
  *           serviceAccount:
  *             client-id: your-client-id
  *             client-secret: your-client-secret
  *             authorization-grant-type: client_credentials
- *         provider:
- *           serviceAccount:
- *             token-uri: https://auth.example.com/oauth/token
  * }</pre>
+ * 
+ * <p><b>Note:</b> The {@code issuer-uri} automatically discovers the token endpoint
+ * and other OAuth2 configuration from the provider's well-known configuration endpoint.
+ * Alternatively, you can explicitly specify {@code token-uri} instead of {@code issuer-uri}.
  * 
  * @see RestClientConfiguration for HTTP clients that use OAuth2 authentication
  * @see RestTemplateConfiguration for RestTemplate with OAuth2 authentication

@@ -14,28 +14,38 @@ These samples demonstrate Spring Boot 3.4+ features including:
 - `ClientHttpConnectorBuilderCustomizer` for reactive HTTP client configuration
 - Externalized configuration properties for all timeout and connection pool settings
 - Fluent builder API for customizing HTTP clients without replacing entire beans
+- OAuth2 client credentials with `issuer-uri` auto-discovery
+
+**Current Version:** Spring Boot 3.5.7
 
 ## Repository Structure
 
 ```
 sample-httpclient-configurations/
 ├── restclient-resttemplate-sample/     # Apache HttpClient configuration
-│   └── src/main/java/miller79/
-│       ├── ApacheHttpClientConfiguration.java
-│       ├── ApacheHttpClientConfigurationProperties.java
-│       ├── SecurityConfiguration.java
-│       ├── RestClientConfiguration.java
-│       ├── RestTemplateConfiguration.java
-│       ├── Application.java
-│       └── SampleImplementation.java
+│   └── src/main/
+│       ├── java/miller79/
+│       │   ├── ApacheHttpClientConfiguration.java
+│       │   ├── ApacheHttpClientConfigurationProperties.java
+│       │   ├── SecurityConfiguration.java
+│       │   ├── RestClientConfiguration.java
+│       │   ├── RestTemplateConfiguration.java
+│       │   ├── Application.java
+│       │   └── SampleImplementation.java
+│       └── resources/
+│           └── application.yaml
 │
 └── webclient-sample/                    # Reactor Netty configuration
-    └── src/main/java/miller79/
-        ├── ReactorHttpClientConfiguration.java
-        ├── ReactorHttpClientConfigurationProperties.java
-        ├── WebClientConfiguration.java
-        ├── Application.java
-        └── SampleImplementation.java
+    └── src/main/
+        ├── java/miller79/
+        │   ├── ReactorHttpClientConfiguration.java
+        │   ├── ReactorHttpClientConfigurationProperties.java
+        │   ├── SecurityConfiguration.java
+        │   ├── WebClientConfiguration.java
+        │   ├── Application.java
+        │   └── SampleImplementation.java
+        └── resources/
+            └── application.yaml
 ```
 
 ## Apache HttpClient Configuration (RestTemplate/RestClient)
@@ -89,73 +99,160 @@ The `webclient-sample` demonstrates how to configure:
 ### Key Classes
 - `ReactorHttpClientConfiguration.java` - Creates `ClientHttpConnectorBuilderCustomizer` bean
 - `ReactorHttpClientConfigurationProperties.java` - Externalized configuration properties
-- `WebClientConfiguration.java` - WebClient setup (auto-configured via customizer)
+- `SecurityConfiguration.java` - OAuth2 client credentials authentication setup (reactive)
+- `WebClientConfiguration.java` - WebClient setup (with and without OAuth2 authentication)
 - `Application.java` - Spring Boot application entry point
 - `SampleImplementation.java` - Demonstration of configured WebClient
 
 ## Configuration Properties
 
-Both samples support externalized configuration via `application.yml` or `application.properties`:
+Both samples support externalized configuration via `application.yaml` or `application.properties`.
 
-### Apache HttpClient Example
+### Apache HttpClient Example (application.yaml)
+
+The `restclient-resttemplate-sample` includes an `application.yaml` file with example configuration:
+
 ```yaml
 miller79:
   apache:
-    name: my-http-client
-    max-connections: 100
-    max-idle-time: 60s
-    max-life-time: 120s
-    so-keep-alive: true
-    tcp-keep-idle: 30s
-    tcp-keep-interval: 5s
-    tcp-keep-count: 3
     response-timeout: 10s
+    # Additional properties can be configured:
+    # max-connections: 100
+    # max-idle-time: 60s
+    # max-life-time: 120s
+    # so-keep-alive: true
+    # tcp-keep-idle: 30s
+    # tcp-keep-interval: 5s
+    # tcp-keep-count: 3
+
+spring:
+  security:
+    oauth2:
+      client:
+        provider:
+          serviceAccount:
+            issuer-uri: ${ISSUER_URI:https://accounts.google.com}
+        registration:
+          serviceAccount:
+            client-id: ${CLIENT_ID}
+            client-secret: ${CLIENT_SECRET}
+            authorization-grant-type: client_credentials
+  http:
+    client:
+      factory: http-components
+      read-timeout: 17s
+      connect-timeout: 16s
 ```
 
-### Reactor Netty Example
+**Note:** The example uses environment variables (`${CLIENT_ID}`, `${CLIENT_SECRET}`, `${ISSUER_URI}`) for sensitive OAuth2 credentials. These should be set in your environment or replaced with actual values.
+
+### Reactor Netty Example (application.yaml)
+
+The `webclient-sample` includes an `application.yaml` file with example configuration:
+
 ```yaml
 miller79:
   reactor:
-    name: my-webclient
-    max-connections: 100
-    max-idle-time: 60s
-    max-life-time: 120s
-    so-keep-alive: true
-    tcp-keep-idle: 30s
-    tcp-keep-interval: 5s
-    tcp-keep-count: 3
-    response-timeout: 10s
+    name: "my-reactor"
+    # Additional properties can be configured:
+    # max-connections: 100
+    # max-idle-time: 60s
+    # max-life-time: 120s
+    # so-keep-alive: true
+    # tcp-keep-idle: 30s
+    # tcp-keep-interval: 5s
+    # tcp-keep-count: 3
+
+spring:
+  security:
+    oauth2:
+      client:
+        provider:
+          serviceAccount:
+            issuer-uri: ${ISSUER_URI:https://accounts.google.com}
+        registration:
+          serviceAccount:
+            client-id: ${CLIENT_ID}
+            client-secret: ${CLIENT_SECRET}
+            authorization-grant-type: client_credentials
+  http:
+    reactiveclient:
+      connector: reactor
+      connect-timeout: 16s
+      read-timeout: 17s
 ```
+
+**Note:** The example uses environment variables for OAuth2 credentials. The `issuer-uri` property automatically configures the token endpoint and other OAuth2 details.
 
 ### OAuth2 Client Credentials Configuration (Optional)
 
-The `restclient-resttemplate-sample` includes OAuth2 client credentials authentication support. To use the authenticated RestClient and RestTemplate beans, configure OAuth2 in `application.yml`:
+**For RestClient/RestTemplate (Blocking):**
+
+The `restclient-resttemplate-sample` includes OAuth2 client credentials authentication support in the `application.yaml` file. The OAuth2 configuration uses environment variables for security:
 
 ```yaml
 spring:
   security:
     oauth2:
       client:
-        registration:
-          serviceAccount:
-            client-id: your-client-id
-            client-secret: your-client-secret
-            authorization-grant-type: client_credentials
-            scope: api.read,api.write
         provider:
           serviceAccount:
-            token-uri: https://auth.example.com/oauth/token
+            issuer-uri: ${ISSUER_URI:https://accounts.google.com}
+        registration:
+          serviceAccount:
+            client-id: ${CLIENT_ID}
+            client-secret: ${CLIENT_SECRET}
+            authorization-grant-type: client_credentials
+            # Optional: scope: api.read,api.write
 ```
+
+**Environment Variables:**
+- `ISSUER_URI` - OAuth2 provider issuer URI (defaults to Google if not set)
+- `CLIENT_ID` - Your OAuth2 client ID
+- `CLIENT_SECRET` - Your OAuth2 client secret
 
 This configuration enables:
 - **Automatic Token Management**: OAuth2 tokens are automatically obtained and refreshed
 - **Token Caching**: Tokens are cached and reused until expiration
 - **Configured HTTP Client**: Token requests use the same customized Apache HttpClient settings
 - **Service-to-Service Auth**: Ideal for microservice authentication scenarios
+- **Issuer URI Discovery**: Automatically discovers token endpoint from issuer URI
 
 The OAuth2 setup is handled by `SecurityConfiguration.java`, which provides:
 - `sampleRestClientWithAuth` - RestClient with OAuth2 bearer token authentication
 - `sampleRestTemplateWithAuth` - RestTemplate with OAuth2 bearer token authentication
+
+**For WebClient (Reactive):**
+
+The `webclient-sample` also includes reactive OAuth2 client credentials authentication support in the `application.yaml` file. The configuration is identical:
+
+```yaml
+spring:
+  security:
+    oauth2:
+      client:
+        provider:
+          serviceAccount:
+            issuer-uri: ${ISSUER_URI:https://accounts.google.com}
+        registration:
+          serviceAccount:
+            client-id: ${CLIENT_ID}
+            client-secret: ${CLIENT_SECRET}
+            authorization-grant-type: client_credentials
+            # Optional: scope: api.read,api.write
+```
+
+This configuration enables reactive OAuth2 features:
+- **Non-Blocking Token Acquisition**: OAuth2 tokens are obtained asynchronously without blocking threads
+- **Reactive Token Management**: Token refresh happens as part of the reactive pipeline
+- **Token Caching**: Tokens are cached reactively and reused until expiration
+- **Configured HTTP Client**: Token requests use the same customized Reactor Netty settings
+- **Issuer URI Discovery**: Automatically discovers token endpoint from issuer URI
+
+The reactive OAuth2 setup is handled by `SecurityConfiguration.java` (in webclient-sample), which provides:
+- `sampleWebClientWithAuth` - WebClient with reactive OAuth2 bearer token authentication
+
+**Key Difference:** The RestClient/RestTemplate OAuth2 implementation uses blocking interceptors, while the WebClient implementation uses reactive filter functions that work with Project Reactor's Mono/Flux types.
 
 ## Why This Matters
 
@@ -229,10 +326,12 @@ cd webclient-sample
 
 ## Requirements
 
-- Java 17 or later
-- Spring Boot 3.4 or later
+- Java 21 or later
+- Spring Boot 3.4 or later (tested with 3.5.7)
 - Maven 3.6 or later
 
 ## License
 
-This is a demonstration repository for educational purposes.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+Copyright (c) 2024 Anthony Lofton

@@ -21,6 +21,7 @@ import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
  * <ul>
  *   <li>{@link ReactorHttpClientConfiguration} - Reactor Netty HTTP client customization</li>
  *   <li>{@link ReactorHttpClientConfigurationProperties} - Externalized configuration</li>
+ *   <li>{@link SecurityConfiguration} - OAuth2 security setup (reactive)</li>
  *   <li>{@link WebClientConfiguration} - WebClient beans</li>
  * </ul>
  * 
@@ -30,11 +31,12 @@ import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
  * is ideal for high-throughput scenarios with many concurrent requests.
  * 
  * @see ReactorHttpClientConfiguration
+ * @see SecurityConfiguration
  * @see WebClientConfiguration
  */
 @SpringBootApplication
 @ConfigurationPropertiesScan
-public class Application {
+class Application {
 
     public static void main(String[] args) {
         SpringApplication.run(Application.class, args);

@@ -74,7 +74,7 @@ import lombok.Data;
  */
 @ConfigurationProperties("miller79.reactor")
 @Data
-public class ReactorHttpClientConfigurationProperties {
+class ReactorHttpClientConfigurationProperties {
 
     /**
      * Name identifier for the connection provider. Useful for monitoring and
