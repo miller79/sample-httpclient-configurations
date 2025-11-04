@@ -4,5 +4,6 @@ miller79:
 spring:
   http:
     reactiveclient:
+      connector: reactor
       connect-timeout: 16s
       read-timeout: 17s
