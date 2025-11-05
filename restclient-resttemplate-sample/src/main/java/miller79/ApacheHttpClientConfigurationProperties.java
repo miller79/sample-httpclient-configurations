@@ -16,6 +16,16 @@ import lombok.Data;
  * variables.
  * 
  * <p>
+ * <b>⚠️ Why These Settings Matter:</b><br>
+ * Without proper configuration, your application may experience:
+ * <ul>
+ * <li><b>Thread pool exhaustion</b> - Threads waiting indefinitely for slow responses</li>
+ * <li><b>Resource leaks</b> - Stale connections accumulating over time</li>
+ * <li><b>Cascading failures</b> - Slow downstream services impacting your entire application</li>
+ * <li><b>Poor performance</b> - Connection reuse not optimized</li>
+ * </ul>
+ * 
+ * <p>
  * <b>Example Configuration (application.yml):</b>
  * 
  * <pre>{@code
@@ -64,6 +74,15 @@ import lombok.Data;
  * buffer for network latency</li>
  * </ul>
  * 
+ * <p>
+ * <b>When to Tune These Settings:</b>
+ * <ul>
+ * <li><b>High traffic services:</b> Increase maxConnections to handle concurrency</li>
+ * <li><b>Slow APIs:</b> Increase responseTimeout to match SLA</li>
+ * <li><b>Behind load balancers:</b> Set maxLifeTime &lt; LB idle timeout</li>
+ * <li><b>Microservice communication:</b> Use shorter timeouts for fail-fast behavior</li>
+ * </ul>
+ * 
  * @see ApacheHttpClientConfiguration
  */
 @ConfigurationProperties("miller79.apache")
@@ -80,6 +99,34 @@ class ApacheHttpClientConfigurationProperties {
      * <li>Target server capacity and rate limits</li>
      * <li>Available system resources (memory, file descriptors)</li>
      * </ul>
+     * 
+     * <p>
+     * <b>What happens if this is too low:</b>
+     * <ul>
+     * <li>Requests queue waiting for available connections</li>
+     * <li>Increased latency (P95/P99 response times spike)</li>
+     * <li>Potential timeout errors under load</li>
+     * <li>"Connection pool timeout" or "pool exhausted" exceptions</li>
+     * </ul>
+     * 
+     * <p>
+     * <b>What happens if this is too high:</b>
+     * <ul>
+     * <li>Excessive memory usage (each connection consumes ~4-8KB)</li>
+     * <li>File descriptor exhaustion (OS limits typically 1024-65536)</li>
+     * <li>Overwhelming downstream services with too many concurrent connections</li>
+     * <li>Longer connection pool cleanup times</li>
+     * </ul>
+     * 
+     * <p>
+     * <b>How to size this correctly:</b>
+     * <ol>
+     * <li>Start with default (64) for most applications</li>
+     * <li>Monitor connection pool metrics (active, idle, pending acquisitions)</li>
+     * <li>If you see pool exhaustion, increase gradually (e.g., 64 → 100 → 150)</li>
+     * <li>For high-throughput services (1000+ req/s), may need 200-500 connections</li>
+     * <li>For low-volume services, 20-50 connections is often sufficient</li>
+     * </ol>
      * 
      * <p>
      * Default: 64 connections
@@ -106,6 +153,51 @@ class ApacheHttpClientConfigurationProperties {
      * Connections are closed and recreated after this duration to prevent issues
      * with long-lived connections (e.g., load balancer timeouts, DNS changes).
      * Should be less than the server's connection timeout.
+     * 
+     * <p>
+     * <b>What happens if not set or too long:</b>
+     * <ul>
+     * <li>Connections persist through load balancer timeouts (typically 60-90s)</li>
+     * <li>Stale connections accumulate, leading to "connection reset" errors</li>
+     * <li>DNS changes not picked up (requests still go to old IPs)</li>
+     * <li>Server-side connection closes silently, causing failures on next use</li>
+     * <li>Cannot handle rolling deployments cleanly</li>
+     * </ul>
+     * 
+     * <p>
+     * <b>What happens if too short:</b>
+     * <ul>
+     * <li>Excessive connection churn (constantly creating/destroying connections)</li>
+     * <li>Increased latency due to frequent TCP handshakes</li>
+     * <li>Higher CPU usage for connection establishment</li>
+     * <li>Connection pool may appear "busy" more often</li>
+     * </ul>
+     * 
+     * <p>
+     * <b>How to set this correctly:</b>
+     * <ol>
+     * <li>Identify your infrastructure's idle timeout settings:
+     *   <ul>
+     *     <li>AWS ALB: 60s default</li>
+     *     <li>AWS ELB Classic: 60s default</li>
+     *     <li>Nginx: 75s default (keepalive_timeout)</li>
+     *     <li>Tomcat: 60s default</li>
+     *   </ul>
+     * </li>
+     * <li>Set this value 20-30% lower than the shortest timeout in your stack</li>
+     * <li>For ALB (60s timeout): set maxLifeTime to 40-50s</li>
+     * <li>For standard setups: 30-60s is usually appropriate</li>
+     * <li>For frequently changing infrastructure: use shorter values (15-30s)</li>
+     * </ol>
+     * 
+     * <p>
+     * <b>Common patterns:</b>
+     * <ul>
+     * <li><b>Behind AWS ALB:</b> 45-50 seconds</li>
+     * <li><b>Behind Nginx:</b> 50-60 seconds</li>
+     * <li><b>Direct service-to-service:</b> 60 seconds</li>
+     * <li><b>Kubernetes with frequent pod rotation:</b> 30 seconds</li>
+     * </ul>
      * 
      * <p>
      * Default: 60 seconds
@@ -187,9 +279,48 @@ class ApacheHttpClientConfigurationProperties {
      * <p>
      * Set this based on:
      * <ul>
-     * <li>Expected API response times</li>
-     * <li>Network latency</li>
-     * <li>Server processing time</li>
+     * <li>Expected API response times (measure P95/P99 latency)</li>
+     * <li>Network latency between services</li>
+     * <li>Server processing time for the operation</li>
+     * </ul>
+     * 
+     * <p>
+     * <b>What happens if not set or too high:</b>
+     * <ul>
+     * <li>Threads wait indefinitely for slow or hung services</li>
+     * <li>Thread pool exhaustion under load</li>
+     * <li>Application appears frozen or unresponsive</li>
+     * <li>Cascading failures to upstream services</li>
+     * <li>No fast failure - can't implement circuit breakers effectively</li>
+     * </ul>
+     * 
+     * <p>
+     * <b>What happens if too low:</b>
+     * <ul>
+     * <li>Valid requests fail prematurely</li>
+     * <li>Increased error rate and retry storms</li>
+     * <li>False positives in monitoring/alerting</li>
+     * <li>Poor user experience due to unnecessary failures</li>
+     * </ul>
+     * 
+     * <p>
+     * <b>How to set this correctly:</b>
+     * <ol>
+     * <li>Measure your API's actual response time (P99 latency)</li>
+     * <li>Add buffer for network variability (typically 2-3x P99)</li>
+     * <li>For most microservices: 5-15 seconds is appropriate</li>
+     * <li>For slow batch APIs: may need 30-60 seconds</li>
+     * <li>For fast cache/lookup APIs: 1-3 seconds may suffice</li>
+     * <li>Never set lower than your expected normal response time</li>
+     * </ol>
+     * 
+     * <p>
+     * <b>Example scenarios:</b>
+     * <ul>
+     * <li><b>Fast API (cache lookup):</b> P99=200ms → set 1-2s timeout</li>
+     * <li><b>Normal API (database query):</b> P99=500ms → set 5-10s timeout</li>
+     * <li><b>Slow API (complex calculation):</b> P99=5s → set 15-20s timeout</li>
+     * <li><b>Batch API (report generation):</b> P99=30s → set 60-90s timeout</li>
      * </ul>
      * 
      * <p>

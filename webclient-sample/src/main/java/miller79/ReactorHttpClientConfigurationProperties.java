@@ -16,6 +16,16 @@ import lombok.Data;
  * or environment variables.
  * 
  * <p>
+ * <b>⚠️ Why These Settings Matter:</b><br>
+ * Without proper configuration, your reactive application may experience:
+ * <ul>
+ * <li><b>Memory exhaustion</b> - Pending reactive streams accumulate without bounds</li>
+ * <li><b>Resource leaks</b> - Stale connections never cleaned up</li>
+ * <li><b>Backpressure issues</b> - Slow downstream services blocking reactive pipelines</li>
+ * <li><b>Cascading failures</b> - Unbound timeouts propagating through reactive chains</li>
+ * </ul>
+ * 
+ * <p>
  * <b>Example Configuration (application.yml):</b>
  * 
  * <pre>{@code
@@ -70,6 +80,15 @@ import lombok.Data;
  * requests with a smaller connection pool due to non-blocking I/O. A pool of 64
  * connections can handle thousands of concurrent reactive streams.
  * 
+ * <p>
+ * <b>When to Tune These Settings:</b>
+ * <ul>
+ * <li><b>High-concurrency reactive apps:</b> Still use relatively small pools (20-100)</li>
+ * <li><b>Streaming APIs (SSE, WebSocket):</b> Increase maxConnections for long-lived streams</li>
+ * <li><b>Behind load balancers:</b> Set maxLifeTime &lt; LB idle timeout</li>
+ * <li><b>Microservice mesh:</b> Use shorter timeouts for fast failure detection</li>
+ * </ul>
+ * 
  * @see ReactorHttpClientConfiguration
  */
 @ConfigurationProperties("miller79.reactor")
@@ -97,6 +116,54 @@ class ReactorHttpClientConfigurationProperties {
      * <li>Target server capacity and rate limits</li>
      * <li>Nature of workload (short-lived requests vs long-lived
      * SSE/WebSocket)</li>
+     * </ul>
+     * 
+     * <p>
+     * <b>🔑 Key Difference from Blocking Clients:</b><br>
+     * A blocking client needs one connection per concurrent request. A reactive
+     * client can multiplex many concurrent reactive streams over a single connection
+     * using non-blocking I/O. This means you typically need 5-10x fewer connections.
+     * 
+     * <p>
+     * <b>What happens if this is too low:</b>
+     * <ul>
+     * <li>Reactive publishers wait for available connections (backpressure)</li>
+     * <li>Increased latency as requests queue behind connection acquisition</li>
+     * <li>"Pending acquire queue has reached its maximum size" errors</li>
+     * <li>Throughput limited by connection availability</li>
+     * </ul>
+     * 
+     * <p>
+     * <b>What happens if this is too high:</b>
+     * <ul>
+     * <li>Memory overhead (Netty buffers + connection state)</li>
+     * <li>Excessive concurrent load on downstream services</li>
+     * <li>File descriptor exhaustion (each connection = OS handle)</li>
+     * <li>Unused connections waste resources (unlike blocking where threads are saved)</li>
+     * </ul>
+     * 
+     * <p>
+     * <b>How to size this for reactive applications:</b>
+     * <ol>
+     * <li><b>Start small:</b> Begin with 10-20 connections for most services</li>
+     * <li><b>Monitor actual usage:</b> Track "active connections" vs "pending acquisitions" metrics</li>
+     * <li><b>Scale based on patterns:</b>
+     *   <ul>
+     *     <li>Short requests (REST APIs): 10-50 connections handles thousands of req/s</li>
+     *     <li>Streaming (SSE/WebSocket): 1 connection per stream; size accordingly</li>
+     *     <li>Mixed workload: 50-100 connections for high-throughput services</li>
+     *   </ul>
+     * </li>
+     * <li><b>Consider target capacity:</b> Don't exceed what the downstream service can handle</li>
+     * </ol>
+     * 
+     * <p>
+     * <b>Example sizing scenarios:</b>
+     * <ul>
+     * <li><b>Low-volume microservice:</b> 5-10 connections</li>
+     * <li><b>Typical REST API client:</b> 20-50 connections</li>
+     * <li><b>High-throughput gateway:</b> 100-200 connections</li>
+     * <li><b>Long-lived SSE streams:</b> 50-500 (one per concurrent stream)</li>
      * </ul>
      * 
      * <p>

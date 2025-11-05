@@ -263,6 +263,138 @@ Default HTTP client configurations may not be suitable for production environmen
 - **Reliability**: Handling network issues gracefully with appropriate timeouts
 - **Resource Management**: Controlling connection pool sizes and lifecycle
 
+## Understanding Timeouts & Defaults
+
+### What Are HTTP Client Timeouts?
+
+When your Spring application makes HTTP requests to other services, several timing-related configurations control how long to wait for responses and how to manage connections. Understanding these is critical for building resilient applications.
+
+### The Default Behavior (No Custom Configuration)
+
+**Without explicit configuration, Spring's HTTP clients use library-specific defaults that may not suit your needs:**
+
+**Apache HttpClient (RestClient/RestTemplate):**
+- **No response timeout by default** - Requests can wait indefinitely for a server response
+- **No connect timeout by default** - Connection attempts can hang waiting for TCP handshake
+- **Default connection pool: ~200 total connections, ~20 per route** - May be too high or too low depending on your use case
+- **No connection TTL limit** - Connections can live indefinitely, risking stale connections through load balancers
+- **No automatic idle connection eviction** - Idle connections consume resources unnecessarily
+
+**Reactor Netty (WebClient):**
+- **No response timeout by default** - Reactive streams can wait indefinitely
+- **No connect timeout by default** - TCP connections can hang without failing fast
+- **Default connection pool: 500 connections** - Often too large for typical microservice communication
+- **Connections live indefinitely by default** - Can accumulate stale connections over time
+- **No automatic eviction** - Idle connections remain in pool consuming memory
+
+### Why Defaults Are Dangerous
+
+**1. Indefinite Waits Can Crash Your Application**
+
+Without timeouts, a slow or unresponsive downstream service can cause your application to:
+- **Exhaust thread pools** (blocking clients) - All request-handling threads get stuck waiting
+- **Run out of memory** (reactive clients) - Pending reactive streams accumulate in memory
+- **Trigger cascading failures** - Your slow service then impacts services calling you
+- **Appear completely frozen** - The application is running but can't process new requests
+
+**2. Resource Leaks Degrade Performance Over Time**
+
+Without proper connection lifecycle management:
+- **Stale connections accumulate** - Connections to old server instances persist after deployments
+- **Load balancer timeouts disconnect silently** - Your pool contains "dead" connections that fail on use
+- **DNS changes aren't picked up** - Long-lived connections bypass DNS updates
+- **File descriptors leak** - Operating system limits can be reached, preventing new connections
+
+**3. Poor Resilience During Failures**
+
+When downstream services have issues:
+- **No fast failure** - Your application waits the full (infinite) timeout before failing
+- **No circuit breaking opportunity** - Can't detect failure patterns without bounded timeouts
+- **Difficult troubleshooting** - Hung requests provide no clear indication of where the problem is
+
+### Recommended Starting Points
+
+These values are reasonable defaults for most microservice-to-microservice communication. **Always tune based on your actual measured latencies and SLAs.**
+
+**For Blocking Clients (Apache HttpClient):**
+```yaml
+spring:
+  http:
+    client:
+      connect-timeout: 5s      # TCP connection establishment (typically very fast)
+      read-timeout: 10s        # Time to wait for response data (depends on API speed)
+
+miller79:
+  apache:
+    max-connections: 50        # Size based on concurrent request needs (start conservative)
+    max-idle-time: 30s         # Evict idle connections (shorter than server timeout)
+    max-life-time: 60s         # Force connection refresh (shorter than LB timeout)
+    response-timeout: 10s      # Maximum time for entire request/response
+    so-keep-alive: true        # Detect broken connections early
+    tcp-keep-idle: 30s         # Start probing after 30s of inactivity
+    tcp-keep-interval: 10s     # Probe every 10s
+    tcp-keep-count: 3          # Consider dead after 3 failed probes
+```
+
+**For Reactive Clients (Reactor Netty):**
+```yaml
+spring:
+  http:
+    reactiveclient:
+      connect-timeout: 5s      # TCP connection establishment
+      # Note: read-timeout works differently in reactive - often not needed
+
+miller79:
+  reactor:
+    name: "my-service"         # Helpful for monitoring multiple clients
+    max-connections: 20        # Smaller than blocking (non-blocking I/O is efficient)
+    max-idle-time: 30s         # Clean up idle connections
+    max-life-time: 60s         # Force refresh to pick up infrastructure changes
+    so-keep-alive: true        # Detect broken connections
+    tcp-keep-idle: 30s         # Linux/Epoll only
+    tcp-keep-interval: 10s     # Linux/Epoll only  
+    tcp-keep-count: 3          # Linux/Epoll only
+```
+
+### Key Principles for Tuning
+
+**1. Response Timeout Should Reflect Your SLA**
+- Measure your P99 latency for the target API
+- Add buffer for network variability (typically 2-3x P99)
+- Never set it lower than your expected normal response time
+- Consider different timeouts for different APIs (fast vs. slow endpoints)
+
+**2. Connection Time-to-Live < Server Idle Timeout**
+- Prevents server from closing connections while your client thinks they're alive
+- Common server idle timeouts: 60s (nginx), 75s (ALB), 90s (ELB Classic)
+- Set your TTL 20-30% lower than the shortest timeout in your infrastructure
+
+**3. Connection Pool Size = Expected Concurrency**
+- **Blocking clients**: Size for peak concurrent outbound requests
+- **Reactive clients**: Can be much smaller (5-20 connections can handle hundreds of concurrent reactive streams)
+- Monitor pool exhaustion metrics and scale up if needed
+- Avoid over-sizing: large pools consume memory and file descriptors
+
+**4. Enable TCP Keep-Alive for Long-Lived Connections**
+- Essential when connections might be idle for extended periods
+- Detects network failures, firewall timeouts, and server crashes
+- Note: Linux/Epoll only for Reactor Netty - degrades gracefully on other platforms
+
+**5. Fail Fast and Clearly**
+- Short connect timeout (5-10s) for faster failure detection
+- Response timeout based on your service SLA
+- Use bounded timeouts at every layer (client → gateway → service)
+
+### Common Mistakes to Avoid
+
+❌ **Setting timeouts too high** - "Let's set 60s to be safe" defeats the purpose; you'll still exhaust resources  
+❌ **No timeout at all** - Relying on defaults means indefinite waits in most cases  
+❌ **Same timeout for all services** - Fast APIs and slow batch APIs need different timeouts  
+❌ **Ignoring connection lifecycle** - Leads to stale connection accumulation over days/weeks  
+❌ **Over-sized connection pools** - Wastes resources and can overwhelm downstream services  
+❌ **Under-sized connection pools** - Causes pool exhaustion and request queuing  
+❌ **Not monitoring timeout metrics** - Can't tune without visibility into actual behavior
+
 ## Key Considerations
 
 ### Spring Boot 3.4+ Features
@@ -289,6 +421,182 @@ Timeouts should be configured in a cascading manner:
 - Validate connections after periods of inactivity
 - Evict idle connections to free resources
 - TCP keep-alive options are platform-specific (Linux only for some settings)
+
+## Troubleshooting Common Issues
+
+### Problem: "Connection pool shut down" or "Connection pool exhausted"
+
+**Symptom:** Application logs show connection pool errors, requests are rejected or queued
+
+**Root Cause:** All connections in the pool are in use, and new requests cannot acquire a connection
+
+**Solutions:**
+1. **Increase pool size** if you have legitimate high concurrency:
+   ```yaml
+   miller79:
+     apache:
+       max-connections: 100  # or higher based on need
+   ```
+2. **Check for connection leaks** - Ensure you're not holding connections without releasing them
+3. **Reduce response timeout** if requests are waiting too long on slow services
+4. **Monitor pool metrics** to understand actual usage patterns
+
+---
+
+### Problem: "SocketTimeoutException: Read timed out"
+
+**Symptom:** Requests fail with socket timeout exceptions after a fixed period
+
+**Root Cause:** Server took longer than `read-timeout` or `response-timeout` to send response
+
+**Solutions:**
+1. **Increase timeout** if the API legitimately takes longer:
+   ```yaml
+   spring:
+     http:
+       client:
+         read-timeout: 30s  # Increase based on API behavior
+   ```
+2. **Optimize the downstream service** if it's slower than your SLA
+3. **Use async patterns** (reactive) if you need to handle long-running operations
+4. **Implement retry logic** with exponential backoff for transient failures
+
+---
+
+### Problem: "NoHttpResponseException" or "Connection reset"
+
+**Symptom:** Random failures with "connection reset" or "no HTTP response" errors
+
+**Root Cause:** Using a stale connection that the server or load balancer already closed
+
+**Solutions:**
+1. **Reduce connection TTL** to refresh connections more frequently:
+   ```yaml
+   miller79:
+     apache:
+       max-life-time: 30s  # Force connection refresh
+       max-idle-time: 20s  # Evict idle connections sooner
+   ```
+2. **Enable connection validation** (already enabled in these samples via `validate-after-inactivity`)
+3. **Ensure TTL < server timeout** (check your server/LB keep-alive timeout)
+4. **Enable TCP keep-alive** to detect broken connections early
+
+---
+
+### Problem: Requests hang indefinitely / Application becomes unresponsive
+
+**Symptom:** Requests never complete, threads are stuck in WAITING state, application appears frozen
+
+**Root Cause:** No timeout configured, waiting forever for a response from an unresponsive service
+
+**Solutions:**
+1. **Set explicit timeouts** - Never rely on defaults:
+   ```yaml
+   spring:
+     http:
+       client:
+         connect-timeout: 5s
+         read-timeout: 15s
+   miller79:
+     apache:
+       response-timeout: 15s
+   ```
+2. **Use thread dumps** to identify which downstream call is hanging
+3. **Implement circuit breakers** (Resilience4j) to fail fast when services are down
+4. **Add request-level timeouts** in your service layer as a last line of defense
+
+---
+
+### Problem: High memory usage or too many open file descriptors
+
+**Symptom:** Application memory grows over time, OS reports too many open files
+
+**Root Cause:** Connections not being evicted, accumulating idle connections in the pool
+
+**Solutions:**
+1. **Enable idle eviction** (already configured in these samples):
+   ```yaml
+   miller79:
+     apache:
+       max-idle-time: 30s
+   ```
+2. **Reduce connection pool size** if it's unnecessarily large
+3. **Set max-life-time** to force connection refresh:
+   ```yaml
+   miller79:
+     apache:
+       max-life-time: 60s
+   ```
+4. **Monitor connection metrics** using Spring Boot Actuator or APM tools
+
+---
+
+### Problem: DNS changes not picked up (requests go to old servers)
+
+**Symptom:** After infrastructure changes, some requests still route to decommissioned servers
+
+**Root Cause:** Long-lived connections bypass DNS resolution
+
+**Solutions:**
+1. **Set connection max-life-time** to force periodic reconnection:
+   ```yaml
+   miller79:
+     apache:
+       max-life-time: 60s  # Force DNS re-resolution every 60s
+   ```
+2. **Use service mesh** (like Istio) for service discovery instead of DNS
+3. **Implement client-side load balancing** (Spring Cloud LoadBalancer)
+
+---
+
+### Problem: Intermittent failures after deployments or during low traffic
+
+**Symptom:** First request after idle period fails, subsequent requests succeed
+
+**Root Cause:** Stale connections in pool were closed by server/LB during idle time
+
+**Solutions:**
+1. **Reduce max-idle-time** to evict idle connections sooner:
+   ```yaml
+   miller79:
+     apache:
+       max-idle-time: 20s
+   ```
+2. **Enable connection validation** before reuse (configured via `validate-after-inactivity` in these samples)
+3. **Implement retry logic** in your application to handle first-request failures gracefully
+
+---
+
+### Debugging Tips
+
+**Enable HTTP client debug logging:**
+```yaml
+logging:
+  level:
+    org.apache.hc.client5: DEBUG          # Apache HttpClient
+    reactor.netty.http.client: DEBUG       # Reactor Netty
+    org.springframework.web.reactive: DEBUG  # Spring WebClient
+```
+
+**Use Spring Boot Actuator metrics:**
+```yaml
+management:
+  endpoints:
+    web:
+      exposure:
+        include: metrics,health
+  metrics:
+    enable:
+      http.client.requests: true
+```
+
+**Monitor these key metrics:**
+- Connection pool active connections
+- Connection pool idle connections  
+- Connection pool pending acquisitions
+- Request timeout rate
+- Connection failure rate
+- P50, P95, P99 response times
 
 ## Running the Samples
 

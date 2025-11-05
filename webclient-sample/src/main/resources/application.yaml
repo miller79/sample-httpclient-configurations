@@ -1,7 +1,7 @@
-miller79:
-  reactor:
-    name: "my-reactor"
+
 spring:
+  # OAuth2 client (client_credentials) example. Provide real values via environment
+  # variables or a profile-specific YAML during deployment.
   security:
     oauth2:
       client:
@@ -13,8 +13,84 @@ spring:
             client-id: ${CLIENT_ID}
             client-secret: ${CLIENT_SECRET}
             authorization-grant-type: client_credentials
+
+  # Reactive HTTP client section (WebClient / Reactor Netty connector)
   http:
     reactiveclient:
+      # Choose the Reactor Netty connector (default for reactive clients in this sample)
       connector: reactor
-      connect-timeout: 16s
-      read-timeout: 17s
+      # Example timeouts (uncomment to enable):
+      # connect-timeout: 10s   # Time to establish TCP connection (Reactor Netty optional)
+      # read-timeout: 30s      # Maximum time to wait for read data on an established connection
+      #
+      # ⚠️ NOTE: In reactive apps, timeouts work differently than blocking apps.
+      # Reactive streams can produce data over time; read-timeout may not be ideal.
+      # Consider using timeout operators in your reactive pipeline instead
+      # (e.g., .timeout(Duration.ofSeconds(30)) on the Mono/Flux).
+
+
+## Example Reactor Netty tuning (commented) ----------------------------------
+# 🎯 Purpose: These settings control connection pooling, lifecycle, and TCP
+#            keep-alive for reactive HTTP clients (WebClient).
+#
+# ⚠️ If you don't configure these: Connections live forever, reactive streams
+#    can wait indefinitely, and memory can grow unbounded.
+#
+# 🔑 Key Difference: Reactive clients need FEWER connections than blocking
+#    clients because they use non-blocking I/O. 20 connections can handle
+#    thousands of concurrent reactive streams!
+#
+# To enable: Copy into a profile (e.g., `application-local.yaml`), remove
+#           the leading `# `, and adjust values for your environment.
+#
+# 📖 Learn more: See README.md "Understanding Timeouts & Defaults" section
+#
+# miller79:
+#   reactor:
+#     # ConnectionProvider name used in Reactor Netty (useful for metrics). Default: "connection"
+#     # 💡 Helpful when running multiple WebClient instances to distinguish metrics
+#     # name: "connection"
+#
+#     # Maximum number of pooled connections. Default: 64
+#     # 💡 Reactive apps need FEWER connections than blocking (non-blocking I/O!)
+#     # 💡 Too low → backpressure, pending acquisitions queue up
+#     # 💡 Too high → memory waste, overwhelm downstream
+#     # 📏 Start small: 10-20 for most services, 50-100 for high throughput
+#     # 📏 Streaming (SSE/WebSocket): 1 connection per stream; size accordingly
+#     # max-connections: 64
+#
+#     # Evict connections idle for longer than this. Default: 60s
+#     # 💡 Clean up unused connections to free memory and file descriptors
+#     # 💡 Should be < server idle timeout to avoid stale connections
+#     # 📏 Common: 30-60s (shorter if behind load balancer)
+#     # max-idle-time: 60s
+#
+#     # Maximum lifetime of a connection before it is closed. Default: 60s
+#     # 💡 Forces connection refresh to handle DNS changes and LB timeouts
+#     # 💡 MUST be < load balancer timeout (AWS ALB=60s, Nginx=75s)
+#     # 📏 Common: 30-50s for LB environments, 60s for direct connections
+#     # max-life-time: 60s
+#
+#     # Enable socket-level TCP keep-alive. Default: true
+#     # 💡 Detects broken connections in long-lived reactive streams
+#     # 💡 Especially important for SSE, WebSocket, and streaming APIs
+#     # so-keep-alive: true
+#
+#     # Idle time before the first TCP keep-alive probe. Default: 30s
+#     # ⚠️ Linux/Epoll only! Silently ignored on Windows/Mac
+#     # 💡 Start probing after this much inactivity
+#     # 📏 Common: 30-60s
+#     # tcp-keep-idle: 30s
+#
+#     # Interval between TCP keep-alive probes. Default: 5s
+#     # ⚠️ Linux/Epoll only! Silently ignored on Windows/Mac
+#     # 💡 How often to retry if first probe fails
+#     # 📏 Common: 5-10s
+#     # tcp-keep-interval: 5s
+#
+#     # Number of TCP keep-alive probes before declaring connection dead. Default: 3
+#     # ⚠️ Linux/Epoll only! Silently ignored on Windows/Mac
+#     # 💡 Total detection time = tcp-keep-idle + (count × interval)
+#     # 📏 Example: 30s + (3 × 5s) = 45s to detect dead connection
+#     # tcp-keep-count: 3
+## -----------------------------------------------------------------------------
