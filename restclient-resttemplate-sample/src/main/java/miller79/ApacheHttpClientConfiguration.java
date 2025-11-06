@@ -16,21 +16,79 @@ import lombok.RequiredArgsConstructor;
  * 
  * <p>
  * This configuration demonstrates how to properly configure low-level HTTP
- * client settings including connection pooling, timeouts, and keep-alive
- * behavior. These settings are critical for production applications to ensure
- * resilience, performance, and proper resource management.
+ * client settings including connection pooling, lifecycle management, and
+ * optional TCP keep-alive behavior. These settings are critical for production
+ * applications to ensure resilience, performance, and proper resource
+ * management.
  * 
  * <p>
- * <b>Key Configuration Areas:</b>
+ * <b>⭐ Production Best Practice Configuration:</b>
+ * 
+ * <pre>{@code
+ * miller79:
+ *   apache:
+ *     max-idle-time: 3m      # Close idle connections after 3 minutes
+ *     max-life-time: 30m     # Replace all connections every 30 minutes
+ * }</pre>
+ * 
+ * <p>
+ * <b>🔧 How This Configuration Works:</b>
  * <ul>
- * <li><b>Connection Pooling:</b> Controls the maximum number of concurrent
- * connections</li>
- * <li><b>Timeouts:</b> Defines various timeout thresholds for connection and
- * response handling</li>
- * <li><b>Keep-Alive:</b> Manages TCP keep-alive settings to maintain persistent
- * connections</li>
- * <li><b>Connection Lifecycle:</b> Controls how long connections can live and
- * when to evict idle ones</li>
+ * <li><b>Null-Safe:</b> Only applies settings if explicitly configured (preserves
+ * underlying client defaults)</li>
+ * <li><b>Connection Lifecycle:</b> Uses {@code maxIdleTime} and {@code maxLifeTime}
+ * to prevent stale connections</li>
+ * <li><b>Optional Keep-Alive:</b> TCP keep-alive settings available but NOT
+ * necessary with proper lifecycle management</li>
+ * <li><b>Platform-Agnostic:</b> Works on Windows, macOS, and Linux without
+ * platform-specific code</li>
+ * </ul>
+ * 
+ * <p>
+ * <b>❌ Common Production Issues (and how this prevents them):</b>
+ * 
+ * <p>
+ * <b>Issue #1: Stale Connections Behind Load Balancers</b>
+ * 
+ * <pre>
+ * Problem: AWS ALB has 60s idle timeout. Client holds connection for 5 minutes.
+ *          Load balancer closes connection silently. Next request fails with
+ *          "Connection reset by peer" or "Broken pipe".
+ * 
+ * Solution: Set max-idle-time: 3m (shorter than ALB timeout)
+ *           Connections are proactively closed before becoming stale.
+ * </pre>
+ * 
+ * <p>
+ * <b>Issue #2: Long-Lived Connections in Dynamic Environments</b>
+ * 
+ * <pre>
+ * Problem: In Kubernetes, pods scale down or restart. Client holds connections
+ *          to terminated pods, leading to connection failures.
+ * 
+ * Solution: Set max-life-time: 10m (short enough for pod churn)
+ *           All connections are cycled regularly, discovering new endpoints.
+ * </pre>
+ * 
+ * <p>
+ * <b>Issue #3: Connection Pool Exhaustion</b>
+ * 
+ * <pre>
+ * Problem: Default pool size too small. High traffic causes threads to wait
+ *          indefinitely for available connections.
+ * 
+ * Solution: Set max-connections: 100 (based on peak concurrent requests)
+ *           Monitor with Micrometer: httpcomponents.httpclient.pool.total.max
+ * </pre>
+ * 
+ * <p>
+ * <b>🔑 Why TCP Keep-Alive Is NOT Needed:</b><br>
+ * With {@code max-idle-time: 3m} and {@code max-life-time: 30m}, connections are
+ * regularly cycled. TCP keep-alive was designed for long-lived idle connections
+ * (hours), which don't exist in this configuration. Only enable keep-alive for:
+ * <ul>
+ * <li>WebSockets or Server-Sent Events (long-lived push connections)</li>
+ * <li>Aggressive corporate firewalls that drop idle TCP connections &lt; 3 minutes</li>
  * </ul>
  * 
  * <p>
@@ -47,78 +105,49 @@ import lombok.RequiredArgsConstructor;
 class ApacheHttpClientConfiguration {
     private final ApacheHttpClientConfigurationProperties apacheHttpClientConfigurationProperties;
 
-    /**
-     * Creates a {@link ClientHttpRequestFactoryBuilderCustomizer} for Apache HttpClient 5.
-     * 
-     * <p>This customizer is automatically applied by Spring Boot 3.4+ to configure both RestClient
-     * and RestTemplate instances with custom HTTP client settings. It configures:
-     * <ul>
-     *   <li><b>Request Configuration:</b> Controls response timeout behavior</li>
-     *   <li><b>Socket Configuration:</b> Manages TCP keep-alive settings at the socket level</li>
-     *   <li><b>Connection Configuration:</b> Defines connection lifecycle (time-to-live and validation)</li>
-     *   <li><b>Connection Manager:</b> Manages a pool of reusable HTTP connections</li>
-     *   <li><b>HTTP Client Customization:</b> Enables automatic eviction of expired and idle connections</li>
-     * </ul>
-     * 
-     * <p><b>Timeout Configuration:</b>
-     * <ul>
-     *   <li><b>Response Timeout:</b> Maximum time to wait for server response</li>
-     *   <li><b>Connection Time-to-Live:</b> Maximum lifetime of a connection in the pool</li>
-     *   <li><b>Validate After Inactivity:</b> Time before a connection is validated before reuse</li>
-     *   <li><b>Idle Eviction:</b> Connections idle longer than this are removed from pool</li>
-     * </ul>
-     * 
-     * <p><b>Keep-Alive Strategy:</b><br>
-     * TCP keep-alive probes are configured to detect broken connections. The kernel sends probes
-     * after {@code tcpKeepIdle} seconds of inactivity, then sends {@code tcpKeepCount} probes
-     * every {@code tcpKeepInterval} seconds. If all probes fail, the connection is considered dead.
-     * 
-     * <p><b>Connection Pool:</b><br>
-     * The pool manages a maximum of {@code maxConnections} total connections across all routes.
-     * Connections are reused for multiple requests to improve performance and reduce the overhead
-     * of establishing new connections.
-     * 
-     * <p><b>Auto-Configuration:</b><br>
-     * Spring Boot automatically applies this customizer to all RestClient.Builder and RestTemplateBuilder
-     * instances in the application context. The customizer uses a fluent builder API to configure
-     * each aspect of the HTTP client separately.
-     * 
-     * @return a ClientHttpRequestFactoryBuilderCustomizer for Apache HttpClient 5
-     * @see ClientHttpRequestFactoryBuilderCustomizer for Spring Boot 3.4+ customization pattern
-     * @see HttpComponentsClientHttpRequestFactoryBuilder for Apache HttpClient 5 builder
-     * @see org.apache.hc.client5.http.config.RequestConfig for request-level timeout configuration
-     * @see org.apache.hc.core5.http.io.SocketConfig for socket-level TCP settings
-     * @see org.apache.hc.client5.http.config.ConnectionConfig for connection lifecycle management
-     */
     @Bean
     ClientHttpRequestFactoryBuilderCustomizer<HttpComponentsClientHttpRequestFactoryBuilder> apacheHttpClientTuning() {
-        // Configure connection lifecycle (time-to-live and validation)
-        ConnectionConfig connectionConfig = ConnectionConfig
-                .custom()
-                .setTimeToLive(Timeout.of(apacheHttpClientConfigurationProperties.getMaxLifeTime()))
-                .setValidateAfterInactivity(Timeout.of(apacheHttpClientConfigurationProperties.getMaxIdleTime()))
-                .build();
+        // Configure connection lifecycle (time-to-live)
+        ConnectionConfig.Builder connectionConfigBuilder = ConnectionConfig.custom();
+        if (apacheHttpClientConfigurationProperties.getMaxLifeTime() != null) {
+            connectionConfigBuilder.setTimeToLive(Timeout.of(apacheHttpClientConfigurationProperties.getMaxLifeTime()));
+        }
 
         // Return customizer with fluent builder configuration
         return builder -> builder
-                // Configure request-level timeouts (response timeout)
-                .withDefaultRequestConfigCustomizer(rcb -> rcb
-                        .setResponseTimeout(Timeout.of(apacheHttpClientConfigurationProperties.getResponseTimeout())))
                 // Configure socket-level TCP keep-alive settings
-                .withSocketConfigCustomizer(scb -> scb
-                        .setSoKeepAlive(apacheHttpClientConfigurationProperties.isSoKeepAlive())
-                        .setTcpKeepCount(apacheHttpClientConfigurationProperties.getTcpKeepCount())
-                        .setTcpKeepIdle(apacheHttpClientConfigurationProperties.getTcpKeepIdle().toSecondsPart())
-                        .setTcpKeepInterval(
-                                apacheHttpClientConfigurationProperties.getTcpKeepInterval().toSecondsPart()))
+                .withSocketConfigCustomizer(scb -> {
+                    if (apacheHttpClientConfigurationProperties.getSoKeepAlive() != null) {
+                        scb.setSoKeepAlive(apacheHttpClientConfigurationProperties.getSoKeepAlive());
+                    }
+                    if (apacheHttpClientConfigurationProperties.getTcpKeepCount() != null) {
+                        scb.setTcpKeepCount(apacheHttpClientConfigurationProperties.getTcpKeepCount());
+                    }
+                    if (apacheHttpClientConfigurationProperties.getTcpKeepIdle() != null) {
+                        scb.setTcpKeepIdle((int) apacheHttpClientConfigurationProperties.getTcpKeepIdle().getSeconds());
+                    }
+                    if (apacheHttpClientConfigurationProperties.getTcpKeepInterval() != null) {
+                        scb
+                                .setTcpKeepInterval((int) apacheHttpClientConfigurationProperties
+                                        .getTcpKeepInterval()
+                                        .getSeconds());
+                    }
+                })
                 // Configure connection pool with max connections and lifecycle
-                .withConnectionManagerCustomizer(cmb -> cmb
-                        .setMaxConnTotal(apacheHttpClientConfigurationProperties.getMaxConnections())
-                        .setDefaultConnectionConfig(connectionConfig))
+                .withConnectionManagerCustomizer(cmb -> {
+                    if (apacheHttpClientConfigurationProperties.getMaxConnections() != null) {
+                        cmb.setMaxConnTotal(apacheHttpClientConfigurationProperties.getMaxConnections());
+                    }
+                    cmb.setDefaultConnectionConfig(connectionConfigBuilder.build());
+                })
                 // Configure HTTP client to evict expired and idle connections
-                .withHttpClientCustomizer(hcb -> hcb
-                        .evictExpiredConnections()
-                        .evictIdleConnections(TimeValue.of(apacheHttpClientConfigurationProperties.getMaxIdleTime())));
+                .withHttpClientCustomizer(hcb -> {
+                    hcb.evictExpiredConnections();
+                    if (apacheHttpClientConfigurationProperties.getMaxIdleTime() != null) {
+                        hcb
+                                .evictIdleConnections(
+                                        TimeValue.of(apacheHttpClientConfigurationProperties.getMaxIdleTime()));
+                    }
+                });
     }
-
 }

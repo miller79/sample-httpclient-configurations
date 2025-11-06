@@ -316,24 +316,41 @@ When downstream services have issues:
 
 These values are reasonable defaults for most microservice-to-microservice communication. **Always tune based on your actual measured latencies and SLAs.**
 
+**⭐ Best Practice for Production:**
+
+For production environments, use these recommended connection lifecycle settings:
+
+```yaml
+miller79:
+  apache:  # or reactor for WebClient
+    max-idle-time: 3m        # 3-4 minutes - Clean up idle connections regularly
+    max-life-time: 30m       # 5-30 minutes - Force connection rotation for DNS/LB changes
+```
+
+**Why these values?**
+- **max-idle-time: 3-4 minutes** - Balances connection reuse with resource cleanup. Shorter than most server/load balancer timeouts, preventing stale connection issues while still allowing effective pooling during normal traffic.
+- **max-life-time: 5-30 minutes** - Forces periodic connection rotation to pick up DNS changes, load balancer updates, and rolling deployments. Use shorter values (5-10min) in dynamic environments like Kubernetes, longer values (20-30min) in stable infrastructure.
+
+**🔑 Important:** With properly configured `max-idle-time` and `max-life-time`, **TCP keep-alive settings are not necessary** for most applications. These connection lifecycle settings already prevent stale connections by proactively closing and refreshing them. TCP keep-alive is only needed for very long-lived idle connections (e.g., persistent websockets, streaming APIs) or environments with aggressive intermediate firewalls that close idle connections faster than your lifecycle settings.
+
 **For Blocking Clients (Apache HttpClient):**
 ```yaml
 spring:
   http:
     client:
       connect-timeout: 5s      # TCP connection establishment (typically very fast)
-      read-timeout: 10s        # Time to wait for response data (depends on API speed)
+      read-timeout: 15s        # Time to wait for response data (depends on API speed)
 
 miller79:
   apache:
     max-connections: 50        # Size based on concurrent request needs (start conservative)
-    max-idle-time: 30s         # Evict idle connections (shorter than server timeout)
-    max-life-time: 60s         # Force connection refresh (shorter than LB timeout)
-    response-timeout: 10s      # Maximum time for entire request/response
-    so-keep-alive: true        # Detect broken connections early
-    tcp-keep-idle: 30s         # Start probing after 30s of inactivity
-    tcp-keep-interval: 10s     # Probe every 10s
-    tcp-keep-count: 3          # Consider dead after 3 failed probes
+    max-idle-time: 3m          # ⭐ Best practice: 3-4 minutes
+    max-life-time: 30m         # ⭐ Best practice: 5-30 minutes based on environment
+    # TCP keep-alive NOT needed with proper lifecycle settings:
+    # so-keep-alive: true      
+    # tcp-keep-idle: 30s       
+    # tcp-keep-interval: 10s   
+    # tcp-keep-count: 3        
 ```
 
 **For Reactive Clients (Reactor Netty):**
@@ -348,26 +365,33 @@ miller79:
   reactor:
     name: "my-service"         # Helpful for monitoring multiple clients
     max-connections: 20        # Smaller than blocking (non-blocking I/O is efficient)
-    max-idle-time: 30s         # Clean up idle connections
-    max-life-time: 60s         # Force refresh to pick up infrastructure changes
-    so-keep-alive: true        # Detect broken connections
-    tcp-keep-idle: 30s         # Linux/Epoll only
-    tcp-keep-interval: 10s     # Linux/Epoll only  
-    tcp-keep-count: 3          # Linux/Epoll only
+    max-idle-time: 3m          # ⭐ Best practice: 3-4 minutes
+    max-life-time: 30m         # ⭐ Best practice: 5-30 minutes based on environment
+    # TCP keep-alive NOT needed with proper lifecycle settings:
+    # so-keep-alive: true      
+    # tcp-keep-idle: 30s       # Linux/Epoll only
+    # tcp-keep-interval: 10s   # Linux/Epoll only  
+    # tcp-keep-count: 3        # Linux/Epoll only
 ```
 
 ### Key Principles for Tuning
 
-**1. Response Timeout Should Reflect Your SLA**
+**1. Connection Lifecycle is Critical for Production Reliability**
+- **max-idle-time: 3-4 minutes** is the sweet spot for most applications
+  - Short enough to prevent stale connections accumulating
+  - Long enough to benefit from connection pooling during normal traffic
+  - Shorter than typical server/load balancer idle timeouts (5-10 minutes)
+- **max-life-time: 5-30 minutes** ensures regular connection rotation
+  - Use 5-10 minutes in dynamic environments (Kubernetes, frequent deployments)
+  - Use 15-30 minutes in stable infrastructure
+  - Always shorter than your DNS TTL to pick up infrastructure changes
+- **With proper lifecycle settings, TCP keep-alive is unnecessary** for typical REST APIs
+
+**2. Response Timeout Should Reflect Your SLA**
 - Measure your P99 latency for the target API
 - Add buffer for network variability (typically 2-3x P99)
 - Never set it lower than your expected normal response time
 - Consider different timeouts for different APIs (fast vs. slow endpoints)
-
-**2. Connection Time-to-Live < Server Idle Timeout**
-- Prevents server from closing connections while your client thinks they're alive
-- Common server idle timeouts: 60s (nginx), 75s (ALB), 90s (ELB Classic)
-- Set your TTL 20-30% lower than the shortest timeout in your infrastructure
 
 **3. Connection Pool Size = Expected Concurrency**
 - **Blocking clients**: Size for peak concurrent outbound requests
@@ -375,10 +399,10 @@ miller79:
 - Monitor pool exhaustion metrics and scale up if needed
 - Avoid over-sizing: large pools consume memory and file descriptors
 
-**4. Enable TCP Keep-Alive for Long-Lived Connections**
-- Essential when connections might be idle for extended periods
-- Detects network failures, firewall timeouts, and server crashes
-- Note: Linux/Epoll only for Reactor Netty - degrades gracefully on other platforms
+**4. TCP Keep-Alive Only for Special Cases**
+- **Not needed** when using proper `max-idle-time` and `max-life-time` settings
+- **Use only for:** Long-lived persistent connections (websockets, SSE), or aggressive firewall environments
+- **Note:** Linux/Epoll only for Reactor Netty - degrades gracefully on other platforms
 
 **5. Fail Fast and Clearly**
 - Short connect timeout (5-10s) for faster failure detection

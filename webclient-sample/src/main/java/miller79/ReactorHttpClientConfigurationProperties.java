@@ -19,27 +19,29 @@ import lombok.Data;
  * <b>⚠️ Why These Settings Matter:</b><br>
  * Without proper configuration, your reactive application may experience:
  * <ul>
- * <li><b>Memory exhaustion</b> - Pending reactive streams accumulate without bounds</li>
+ * <li><b>Memory exhaustion</b> - Pending reactive streams accumulate without
+ * bounds</li>
  * <li><b>Resource leaks</b> - Stale connections never cleaned up</li>
- * <li><b>Backpressure issues</b> - Slow downstream services blocking reactive pipelines</li>
- * <li><b>Cascading failures</b> - Unbound timeouts propagating through reactive chains</li>
+ * <li><b>Backpressure issues</b> - Slow downstream services blocking reactive
+ * pipelines</li>
+ * <li><b>Cascading failures</b> - Unbound timeouts propagating through reactive
+ * chains</li>
  * </ul>
  * 
  * <p>
- * <b>Example Configuration (application.yml):</b>
+ * <b>⭐ Recommended Configuration for Production (application.yml):</b>
  * 
  * <pre>{@code
  * miller79:
  *   reactor:
- *     name: my-webclient
- *     max-connections: 100
- *     max-idle-time: 60s
- *     max-life-time: 120s
- *     so-keep-alive: true
- *     tcp-keep-idle: 30s
- *     tcp-keep-interval: 5s
- *     tcp-keep-count: 3
- *     response-timeout: 10s
+ *     # Connection lifecycle - These two settings are essential!
+ *     max-idle-time: 3m        # 3-4 minutes recommended
+ *     max-life-time: 30m       # 5-30 minutes based on environment
+ *     
+ *     # Optional settings (only configure if needed):
+ *     # name: my-webclient     # For monitoring/debugging
+ *     # max-connections: 50    # Reactive apps need FEWER connections
+ *     # TCP keep-alive NOT needed with proper lifecycle settings
  * }</pre>
  * 
  * <p>
@@ -48,45 +50,41 @@ import lombok.Data;
  * <li><b>name:</b> Identifier for the connection provider (useful for
  * monitoring/debugging)</li>
  * <li><b>maxConnections:</b> Maximum number of connections in the pool</li>
- * <li><b>maxIdleTime:</b> How long idle connections remain before eviction</li>
- * <li><b>maxLifeTime:</b> Maximum lifetime of any connection</li>
- * <li><b>soKeepAlive:</b> Enable TCP keep-alive at socket level</li>
- * <li><b>tcpKeepIdle:</b> Time before first keep-alive probe is sent (Linux
- * only)</li>
- * <li><b>tcpKeepInterval:</b> Time between subsequent keep-alive probes (Linux
- * only)</li>
- * <li><b>tcpKeepCount:</b> Number of failed probes before connection is dead
- * (Linux only)</li>
- * <li><b>responseTimeout:</b> Maximum time to wait for server response</li>
+ * <li><b>maxIdleTime:</b> How long idle connections remain before eviction
+ * (⭐ 3-4 minutes recommended)</li>
+ * <li><b>maxLifeTime:</b> Maximum lifetime of any connection
+ * (⭐ 5-30 minutes recommended)</li>
+ * <li><b>soKeepAlive:</b> Enable TCP keep-alive (NOT needed with proper lifecycle settings)</li>
+ * <li><b>tcpKeepIdle:</b> Time before first keep-alive probe (Linux/Epoll only, special cases)</li>
+ * <li><b>tcpKeepInterval:</b> Time between keep-alive probes (Linux/Epoll only, special cases)</li>
+ * <li><b>tcpKeepCount:</b> Failed probes before connection is dead (Linux/Epoll only, special cases)</li>
  * </ul>
  * 
  * <p>
- * <b>Best Practices:</b>
+ * <b>🔑 Key Best Practices:</b>
  * <ul>
- * <li>Set {@code maxLifeTime} less than server's idle timeout to prevent
- * server-side closures</li>
- * <li>Set {@code maxIdleTime} to clean up unused connections and free
- * resources</li>
- * <li>Size {@code maxConnections} based on expected concurrent reactive
- * streams</li>
- * <li>Set {@code responseTimeout} generously for reactive streams that may
- * produce data over time</li>
- * <li>TCP keep-alive options only work on Linux when using Epoll transport</li>
+ * <li><b>max-idle-time: 3-4 minutes</b> - Prevents stale connections while allowing pooling benefits</li>
+ * <li><b>max-life-time: 5-30 minutes</b> - Use 5-10 min for dynamic environments (Kubernetes),
+ * 15-30 min for stable infrastructure</li>
+ * <li><b>TCP keep-alive NOT necessary</b> - With proper lifecycle settings, keep-alive adds
+ * no value for typical REST APIs. Only needed for WebSockets, SSE, or long-lived streams.</li>
+ * <li>Size {@code maxConnections} smaller than blocking clients (20-50 is often sufficient)</li>
  * </ul>
  * 
  * <p>
  * <b>Reactive Considerations:</b><br>
  * Unlike blocking HTTP clients, Reactor Netty can handle many concurrent
- * requests with a smaller connection pool due to non-blocking I/O. A pool of 64
+ * requests with a smaller connection pool due to non-blocking I/O. A pool of 50
  * connections can handle thousands of concurrent reactive streams.
  * 
  * <p>
  * <b>When to Tune These Settings:</b>
  * <ul>
- * <li><b>High-concurrency reactive apps:</b> Still use relatively small pools (20-100)</li>
- * <li><b>Streaming APIs (SSE, WebSocket):</b> Increase maxConnections for long-lived streams</li>
- * <li><b>Behind load balancers:</b> Set maxLifeTime &lt; LB idle timeout</li>
- * <li><b>Microservice mesh:</b> Use shorter timeouts for fast failure detection</li>
+ * <li><b>High-concurrency reactive apps:</b> Use small pools (20-50) - non-blocking I/O handles it</li>
+ * <li><b>Dynamic environments:</b> Use shorter maxLifeTime (5-10 minutes)</li>
+ * <li><b>Stable infrastructure:</b> Use longer maxLifeTime (15-30 minutes)</li>
+ * <li><b>Special cases only:</b> Enable TCP keep-alive for WebSockets, SSE, or long-lived streams</li>
+ * <li><b>Linux/Epoll:</b> TCP keep-alive options only work with Epoll transport (not NIO)</li>
  * </ul>
  * 
  * @see ReactorHttpClientConfiguration
@@ -121,8 +119,9 @@ class ReactorHttpClientConfigurationProperties {
      * <p>
      * <b>🔑 Key Difference from Blocking Clients:</b><br>
      * A blocking client needs one connection per concurrent request. A reactive
-     * client can multiplex many concurrent reactive streams over a single connection
-     * using non-blocking I/O. This means you typically need 5-10x fewer connections.
+     * client can multiplex many concurrent reactive streams over a single
+     * connection using non-blocking I/O. This means you typically need 5-10x fewer
+     * connections.
      * 
      * <p>
      * <b>What happens if this is too low:</b>
@@ -139,22 +138,26 @@ class ReactorHttpClientConfigurationProperties {
      * <li>Memory overhead (Netty buffers + connection state)</li>
      * <li>Excessive concurrent load on downstream services</li>
      * <li>File descriptor exhaustion (each connection = OS handle)</li>
-     * <li>Unused connections waste resources (unlike blocking where threads are saved)</li>
+     * <li>Unused connections waste resources (unlike blocking where threads are
+     * saved)</li>
      * </ul>
      * 
      * <p>
      * <b>How to size this for reactive applications:</b>
      * <ol>
      * <li><b>Start small:</b> Begin with 10-20 connections for most services</li>
-     * <li><b>Monitor actual usage:</b> Track "active connections" vs "pending acquisitions" metrics</li>
+     * <li><b>Monitor actual usage:</b> Track "active connections" vs "pending
+     * acquisitions" metrics</li>
      * <li><b>Scale based on patterns:</b>
-     *   <ul>
-     *     <li>Short requests (REST APIs): 10-50 connections handles thousands of req/s</li>
-     *     <li>Streaming (SSE/WebSocket): 1 connection per stream; size accordingly</li>
-     *     <li>Mixed workload: 50-100 connections for high-throughput services</li>
-     *   </ul>
+     * <ul>
+     * <li>Short requests (REST APIs): 10-50 connections handles thousands of
+     * req/s</li>
+     * <li>Streaming (SSE/WebSocket): 1 connection per stream; size accordingly</li>
+     * <li>Mixed workload: 50-100 connections for high-throughput services</li>
+     * </ul>
      * </li>
-     * <li><b>Consider target capacity:</b> Don't exceed what the downstream service can handle</li>
+     * <li><b>Consider target capacity:</b> Don't exceed what the downstream service
+     * can handle</li>
      * </ol>
      * 
      * <p>
@@ -167,9 +170,9 @@ class ReactorHttpClientConfigurationProperties {
      * </ul>
      * 
      * <p>
-     * Default: 64 connections
+     * Default: 64 connections (if not set, underlying client default is used)
      */
-    private int maxConnections = 64;
+    private Integer maxConnections;
 
     /**
      * Maximum time a connection can remain idle before being evicted.
@@ -183,9 +186,17 @@ class ReactorHttpClientConfigurationProperties {
      * closures.
      * 
      * <p>
-     * Default: 60 seconds
+     * <b>⭐ Best Practice: 3-4 minutes</b>
+     * <ul>
+     * <li>Short enough to prevent stale connection accumulation</li>
+     * <li>Long enough to benefit from connection pooling during normal traffic</li>
+     * <li>Shorter than typical server/load balancer idle timeouts (5-10 minutes)</li>
+     * </ul>
+     * 
+     * <p>
+     * Default: Not set (if not configured, connections may remain idle indefinitely)
      */
-    private Duration maxIdleTime = Duration.ofSeconds(60);
+    private Duration maxIdleTime;
 
     /**
      * Maximum lifetime of a connection, regardless of activity.
@@ -199,9 +210,19 @@ class ReactorHttpClientConfigurationProperties {
      * Should be less than the server's connection timeout.
      * 
      * <p>
-     * Default: 60 seconds
+     * <b>⭐ Best Practice: 5-30 minutes</b>
+     * <ul>
+     * <li><b>Dynamic environments (Kubernetes, frequent deployments):</b> 5-10 minutes</li>
+     * <li><b>Stable infrastructure:</b> 15-30 minutes</li>
+     * <li>Forces periodic connection rotation to pick up DNS changes, load balancer
+     * updates, and rolling deployments</li>
+     * <li>Always set shorter than your DNS TTL</li>
+     * </ul>
+     * 
+     * <p>
+     * Default: Not set (if not configured, connections may live indefinitely)
      */
-    private Duration maxLifeTime = Duration.ofSeconds(60);
+    private Duration maxLifeTime;
 
     /**
      * Enable TCP keep-alive at the socket level.
@@ -216,9 +237,25 @@ class ReactorHttpClientConfigurationProperties {
      * connections open for extended periods waiting for asynchronous events.
      * 
      * <p>
-     * Default: true (enabled)
+     * <b>🔑 Important:</b> With properly configured {@code maxIdleTime} (3-4 minutes)
+     * and {@code maxLifeTime} (5-30 minutes), TCP keep-alive is <b>NOT necessary</b>
+     * for most applications. The connection lifecycle settings already prevent stale
+     * connections by proactively closing and refreshing them.
+     * 
+     * <p>
+     * <b>Only enable TCP keep-alive for special cases:</b>
+     * <ul>
+     * <li>Very long-lived idle connections (e.g., persistent WebSockets, SSE)</li>
+     * <li>Environments with aggressive intermediate firewalls that close idle
+     * connections faster than your lifecycle settings</li>
+     * <li>Connections that must remain open for extended periods without data
+     * transfer</li>
+     * </ul>
+     * 
+     * <p>
+     * Default: Not set (if not configured, OS default is used, typically disabled)
      */
-    private boolean soKeepAlive = true;
+    private Boolean soKeepAlive;
 
     /**
      * Time of inactivity before the first TCP keep-alive probe is sent.
@@ -235,9 +272,9 @@ class ReactorHttpClientConfigurationProperties {
      * Only applicable when {@code soKeepAlive} is true.
      * 
      * <p>
-     * Default: 30 seconds
+     * Default: 30 seconds (if not set, underlying client default is used)
      */
-    private Duration tcpKeepIdle = Duration.ofSeconds(30);
+    private Duration tcpKeepIdle;
 
     /**
      * Time interval between subsequent TCP keep-alive probes.
@@ -254,9 +291,9 @@ class ReactorHttpClientConfigurationProperties {
      * Only applicable when {@code soKeepAlive} is true.
      * 
      * <p>
-     * Default: 5 seconds
+     * Default: 5 seconds (if not set, underlying client default is used)
      */
-    private Duration tcpKeepInterval = Duration.ofSeconds(5);
+    private Duration tcpKeepInterval;
 
     /**
      * Number of failed TCP keep-alive probes before the connection is considered
@@ -278,7 +315,7 @@ class ReactorHttpClientConfigurationProperties {
      * Only applicable when {@code soKeepAlive} is true.
      * 
      * <p>
-     * Default: 3 probes
+     * Default: 3 probes (if not set, underlying client default is used)
      */
-    private int tcpKeepCount = 3;
+    private Integer tcpKeepCount;
 }

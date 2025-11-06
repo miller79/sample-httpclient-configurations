@@ -22,69 +22,34 @@ spring:
       # Select the Spring-provided HttpComponents (Apache HttpClient 5) factory
       factory: http-components
       # Common timeout examples (uncomment and tune based on your API SLAs):
-      # read-timeout: 16s     # Maximum time to wait for a response after request is sent
-      # connect-timeout: 17s  # Time to establish TCP connection to the server
-      #
-      # ⚠️ WARNING: Without these timeouts, requests can wait INDEFINITELY!
-      # This can exhaust thread pools and cause cascading failures.
-      # Recommended: 5-15s for most APIs (measure your P99 latency + buffer)
+      # read-timeout: 3m     # Maximum time to wait for a response after request is sent
+      # connect-timeout: 3m  # Time to establish TCP connection to the server
 
-
-## Example Apache HttpClient tuning (commented) -------------------------------
-# 🎯 Purpose: These settings control connection pooling, lifecycle, and TCP
-#            keep-alive for blocking HTTP clients (RestClient/RestTemplate).
-#
-# ⚠️ If you don't configure these: Connections live forever, idle connections
-#    accumulate, and stale connections cause "connection reset" errors.
-#
-# To enable: Copy into a profile (e.g., `application-local.yaml`), remove
-#           the leading `# `, and adjust values for your environment.
-#
-# 📖 Learn more: See README.md "Understanding Timeouts & Defaults" section
-#
-# miller79:
-#   apache:
-#     # Max total connections across all routes. Default: 64
-#     # 💡 Too low → requests queue, timeouts increase
-#     # 💡 Too high → memory waste, overwhelm downstream services
-#     # 📏 Size based on peak concurrent requests (start with 50-100)
-#     # max-connections: 64
-#
-#     # Evict connections idle for longer than this. Default: 60s
-#     # 💡 Shorter values free up resources faster
-#     # 💡 Should be < server idle timeout to prevent stale connections
-#     # 📏 Common: 30-60s (shorter if behind load balancer)
-#     # max-idle-time: 60s
-#
-#     # Maximum lifetime before connection is closed and removed. Default: 60s
-#     # 💡 Prevents stale connections through load balancers/DNS changes
-#     # 💡 MUST be < load balancer timeout (AWS ALB=60s, Nginx=75s)
-#     # 📏 Common: 30-50s for LB environments, 60s for direct connections
-#     # max-life-time: 60s
-#
-#     # Enable socket-level TCP keep-alive. Default: true
-#     # 💡 Detects broken connections before they're used
-#     # 💡 Essential for long-lived connection pools
-#     # so-keep-alive: true
-#
-#     # Idle time before the first TCP keep-alive probe. Default: 30s
-#     # 💡 Start probing after this much inactivity
-#     # 📏 Common: 30-60s (balance between detection speed & network overhead)
-#     # tcp-keep-idle: 30s
-#
-#     # Interval between TCP keep-alive probes. Default: 5s
-#     # 💡 How often to retry if first probe fails
-#     # 📏 Common: 5-10s
-#     # tcp-keep-interval: 5s
-#
-#     # Number of failed probes before connection is dead. Default: 3
-#     # 💡 Total detection time = tcp-keep-idle + (count × interval)
-#     # 📏 Example: 30s + (3 × 5s) = 45s to detect dead connection
-#     # tcp-keep-count: 3
-#
-#     # Response timeout applied on the client side. Default: 5s
-#     # 💡 CRITICAL: Set based on your API's P99 latency + buffer
-#     # 💡 Too low → valid requests fail; Too high → slow services block threads
-#     # 📏 Fast APIs: 1-5s | Normal APIs: 5-15s | Slow APIs: 15-60s
-#     # response-timeout: 5s
-## -----------------------------------------------------------------------------
+miller79:
+  apache:
+    # ⭐ BEST PRACTICE: Connection lifecycle settings prevent stale connections
+    # These values work for 95% of production applications
+    
+    max-idle-time: 3m
+    # 💡 3-4 minutes is optimal for most apps
+    # - Short enough to clean up idle connections regularly
+    # - Long enough to benefit from connection pooling
+    # - Shorter than typical server/LB timeouts (5-10 min)
+    
+    max-life-time: 30m
+    # 💡 5-30 minutes forces connection rotation
+    # - 5-10 min: Dynamic environments (Kubernetes, frequent deploys)
+    # - 15-30 min: Stable infrastructure
+    # - Ensures DNS changes and LB updates are picked up
+    
+    # 🔑 With the above settings, TCP keep-alive is NOT necessary!
+    # Only enable keep-alive for special cases:
+    # - Long-lived persistent connections (WebSockets, SSE)
+    # - Aggressive firewall environments that close connections < 3 min
+    
+    # Uncomment only if needed:
+    # max-connections: 50           # Based on peak concurrent requests
+    # so-keep-alive: true           # Only for special cases (see above)
+    # tcp-keep-idle: 30s            # Time before first keep-alive probe
+    # tcp-keep-interval: 10s        # Time between probes
+    # tcp-keep-count: 3             # Failed probes before connection is dead

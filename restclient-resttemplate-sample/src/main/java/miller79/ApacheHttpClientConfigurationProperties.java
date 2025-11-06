@@ -19,68 +19,63 @@ import lombok.Data;
  * <b>⚠️ Why These Settings Matter:</b><br>
  * Without proper configuration, your application may experience:
  * <ul>
- * <li><b>Thread pool exhaustion</b> - Threads waiting indefinitely for slow responses</li>
+ * <li><b>Thread pool exhaustion</b> - Threads waiting indefinitely for slow
+ * responses</li>
  * <li><b>Resource leaks</b> - Stale connections accumulating over time</li>
- * <li><b>Cascading failures</b> - Slow downstream services impacting your entire application</li>
+ * <li><b>Cascading failures</b> - Slow downstream services impacting your
+ * entire application</li>
  * <li><b>Poor performance</b> - Connection reuse not optimized</li>
  * </ul>
  * 
  * <p>
- * <b>Example Configuration (application.yml):</b>
+ * <b>⭐ Recommended Configuration for Production (application.yml):</b>
  * 
  * <pre>{@code
  * miller79:
  *   apache:
- *     name: my-http-client
- *     max-connections: 100
- *     max-idle-time: 60s
- *     max-life-time: 120s
- *     so-keep-alive: true
- *     tcp-keep-idle: 30s
- *     tcp-keep-interval: 5s
- *     tcp-keep-count: 3
- *     response-timeout: 10s
+ *     # Connection lifecycle - These two settings are essential!
+ *     max-idle-time: 3m        # 3-4 minutes recommended
+ *     max-life-time: 30m       # 5-30 minutes based on environment
+ *     
+ *     # Optional settings (only configure if needed):
+ *     # max-connections: 50    # Based on peak concurrent requests
+ *     # TCP keep-alive NOT needed with proper lifecycle settings
  * }</pre>
  * 
  * <p>
  * <b>Property Descriptions:</b>
  * <ul>
- * <li><b>name:</b> Identifier for the connection pool (useful for
- * monitoring/debugging)</li>
  * <li><b>maxConnections:</b> Maximum total connections in the pool across all
  * routes</li>
- * <li><b>maxIdleTime:</b> How long idle connections remain in pool before
- * eviction</li>
- * <li><b>maxLifeTime:</b> Maximum lifetime of any connection (should be less
- * than server timeout)</li>
- * <li><b>soKeepAlive:</b> Enable TCP keep-alive at socket level</li>
- * <li><b>tcpKeepIdle:</b> Time before first keep-alive probe is sent</li>
- * <li><b>tcpKeepInterval:</b> Time between subsequent keep-alive probes</li>
- * <li><b>tcpKeepCount:</b> Number of failed probes before connection is
- * considered dead</li>
- * <li><b>responseTimeout:</b> Maximum time to wait for server response</li>
+ * <li><b>maxIdleTime:</b> How long idle connections remain before eviction
+ * (⭐ 3-4 minutes recommended)</li>
+ * <li><b>maxLifeTime:</b> Maximum lifetime of any connection
+ * (⭐ 5-30 minutes recommended)</li>
+ * <li><b>soKeepAlive:</b> Enable TCP keep-alive (NOT needed with proper lifecycle settings)</li>
+ * <li><b>tcpKeepIdle:</b> Time before first keep-alive probe (only for special cases)</li>
+ * <li><b>tcpKeepInterval:</b> Time between keep-alive probes (only for special cases)</li>
+ * <li><b>tcpKeepCount:</b> Failed probes before connection is dead (only for special cases)</li>
  * </ul>
  * 
  * <p>
- * <b>Best Practices:</b>
+ * <b>🔑 Key Best Practices:</b>
  * <ul>
- * <li>Set {@code maxLifeTime} less than server's idle timeout to prevent
- * server-side connection closures</li>
- * <li>Set {@code tcpKeepIdle} to detect broken connections before they're
- * reused</li>
- * <li>Size {@code maxConnections} based on expected concurrent requests and
- * target server capacity</li>
- * <li>Set {@code responseTimeout} based on expected API response times plus
- * buffer for network latency</li>
+ * <li><b>max-idle-time: 3-4 minutes</b> - Prevents stale connections while allowing pooling benefits</li>
+ * <li><b>max-life-time: 5-30 minutes</b> - Use 5-10 min for dynamic environments (Kubernetes),
+ * 15-30 min for stable infrastructure</li>
+ * <li><b>TCP keep-alive NOT necessary</b> - With proper lifecycle settings, keep-alive adds
+ * no value for typical REST APIs. Only needed for long-lived persistent connections.</li>
+ * <li>Size {@code maxConnections} based on peak concurrent requests (50 is a good starting point)</li>
  * </ul>
  * 
  * <p>
  * <b>When to Tune These Settings:</b>
  * <ul>
- * <li><b>High traffic services:</b> Increase maxConnections to handle concurrency</li>
- * <li><b>Slow APIs:</b> Increase responseTimeout to match SLA</li>
- * <li><b>Behind load balancers:</b> Set maxLifeTime &lt; LB idle timeout</li>
- * <li><b>Microservice communication:</b> Use shorter timeouts for fail-fast behavior</li>
+ * <li><b>High traffic services:</b> Increase maxConnections to handle
+ * concurrency</li>
+ * <li><b>Dynamic environments:</b> Use shorter maxLifeTime (5-10 minutes)</li>
+ * <li><b>Stable infrastructure:</b> Use longer maxLifeTime (15-30 minutes)</li>
+ * <li><b>Special cases only:</b> Enable TCP keep-alive for WebSockets, SSE, or aggressive firewalls</li>
  * </ul>
  * 
  * @see ApacheHttpClientConfiguration
@@ -114,7 +109,8 @@ class ApacheHttpClientConfigurationProperties {
      * <ul>
      * <li>Excessive memory usage (each connection consumes ~4-8KB)</li>
      * <li>File descriptor exhaustion (OS limits typically 1024-65536)</li>
-     * <li>Overwhelming downstream services with too many concurrent connections</li>
+     * <li>Overwhelming downstream services with too many concurrent
+     * connections</li>
      * <li>Longer connection pool cleanup times</li>
      * </ul>
      * 
@@ -123,15 +119,17 @@ class ApacheHttpClientConfigurationProperties {
      * <ol>
      * <li>Start with default (64) for most applications</li>
      * <li>Monitor connection pool metrics (active, idle, pending acquisitions)</li>
-     * <li>If you see pool exhaustion, increase gradually (e.g., 64 → 100 → 150)</li>
-     * <li>For high-throughput services (1000+ req/s), may need 200-500 connections</li>
+     * <li>If you see pool exhaustion, increase gradually (e.g., 64 → 100 →
+     * 150)</li>
+     * <li>For high-throughput services (1000+ req/s), may need 200-500
+     * connections</li>
      * <li>For low-volume services, 20-50 connections is often sufficient</li>
      * </ol>
      * 
      * <p>
-     * Default: 64 connections
+     * Default: 64 connections (if not set, underlying client default is used)
      */
-    private int maxConnections = 64;
+    private Integer maxConnections;
 
     /**
      * Maximum time a connection can remain idle in the pool before being evicted.
@@ -142,9 +140,17 @@ class ApacheHttpClientConfigurationProperties {
      * server-side connection closures.
      * 
      * <p>
-     * Default: 60 seconds
+     * <b>⭐ Best Practice: 3-4 minutes</b>
+     * <ul>
+     * <li>Short enough to prevent stale connection accumulation</li>
+     * <li>Long enough to benefit from connection pooling during normal traffic</li>
+     * <li>Shorter than typical server/load balancer idle timeouts (5-10 minutes)</li>
+     * </ul>
+     * 
+     * <p>
+     * Default: Not set (if not configured, connections may remain idle indefinitely)
      */
-    private Duration maxIdleTime = Duration.ofSeconds(60);
+    private Duration maxIdleTime;
 
     /**
      * Maximum lifetime of a connection in the pool, regardless of activity.
@@ -155,9 +161,20 @@ class ApacheHttpClientConfigurationProperties {
      * Should be less than the server's connection timeout.
      * 
      * <p>
+     * <b>⭐ Best Practice: 5-30 minutes</b>
+     * <ul>
+     * <li><b>Dynamic environments (Kubernetes, frequent deployments):</b> 5-10 minutes</li>
+     * <li><b>Stable infrastructure:</b> 15-30 minutes</li>
+     * <li>Forces periodic connection rotation to pick up DNS changes, load balancer
+     * updates, and rolling deployments</li>
+     * <li>Always set shorter than your DNS TTL</li>
+     * </ul>
+     * 
+     * <p>
      * <b>What happens if not set or too long:</b>
      * <ul>
-     * <li>Connections persist through load balancer timeouts (typically 60-90s)</li>
+     * <li>Connections persist through load balancer timeouts (typically
+     * 60-90s)</li>
      * <li>Stale connections accumulate, leading to "connection reset" errors</li>
      * <li>DNS changes not picked up (requests still go to old IPs)</li>
      * <li>Server-side connection closes silently, causing failures on next use</li>
@@ -167,7 +184,8 @@ class ApacheHttpClientConfigurationProperties {
      * <p>
      * <b>What happens if too short:</b>
      * <ul>
-     * <li>Excessive connection churn (constantly creating/destroying connections)</li>
+     * <li>Excessive connection churn (constantly creating/destroying
+     * connections)</li>
      * <li>Increased latency due to frequent TCP handshakes</li>
      * <li>Higher CPU usage for connection establishment</li>
      * <li>Connection pool may appear "busy" more often</li>
@@ -177,12 +195,12 @@ class ApacheHttpClientConfigurationProperties {
      * <b>How to set this correctly:</b>
      * <ol>
      * <li>Identify your infrastructure's idle timeout settings:
-     *   <ul>
-     *     <li>AWS ALB: 60s default</li>
-     *     <li>AWS ELB Classic: 60s default</li>
-     *     <li>Nginx: 75s default (keepalive_timeout)</li>
-     *     <li>Tomcat: 60s default</li>
-     *   </ul>
+     * <ul>
+     * <li>AWS ALB: 60s default</li>
+     * <li>AWS ELB Classic: 60s default</li>
+     * <li>Nginx: 75s default (keepalive_timeout)</li>
+     * <li>Tomcat: 60s default</li>
+     * </ul>
      * </li>
      * <li>Set this value 20-30% lower than the shortest timeout in your stack</li>
      * <li>For ALB (60s timeout): set maxLifeTime to 40-50s</li>
@@ -200,9 +218,9 @@ class ApacheHttpClientConfigurationProperties {
      * </ul>
      * 
      * <p>
-     * Default: 60 seconds
+     * Default: Not set (if not configured, connections may live indefinitely)
      */
-    private Duration maxLifeTime = Duration.ofSeconds(60);
+    private Duration maxLifeTime;
 
     /**
      * Enable TCP keep-alive at the socket level.
@@ -212,9 +230,25 @@ class ApacheHttpClientConfigurationProperties {
      * broken connections (e.g., due to network failures, firewall timeouts).
      * 
      * <p>
-     * Default: true (enabled)
+     * <b>🔑 Important:</b> With properly configured {@code maxIdleTime} (3-4 minutes)
+     * and {@code maxLifeTime} (5-30 minutes), TCP keep-alive is <b>NOT necessary</b>
+     * for most applications. The connection lifecycle settings already prevent stale
+     * connections by proactively closing and refreshing them.
+     * 
+     * <p>
+     * <b>Only enable TCP keep-alive for special cases:</b>
+     * <ul>
+     * <li>Very long-lived idle connections (e.g., persistent WebSockets, SSE)</li>
+     * <li>Environments with aggressive intermediate firewalls that close idle
+     * connections faster than your lifecycle settings</li>
+     * <li>Connections that must remain open for extended periods without data
+     * transfer</li>
+     * </ul>
+     * 
+     * <p>
+     * Default: Not set (if not configured, OS default is used, typically disabled)
      */
-    private boolean soKeepAlive = true;
+    private Boolean soKeepAlive;
 
     /**
      * Time of inactivity before the first TCP keep-alive probe is sent.
@@ -227,9 +261,9 @@ class ApacheHttpClientConfigurationProperties {
      * Only applicable when {@code soKeepAlive} is true.
      * 
      * <p>
-     * Default: 30 seconds
+     * Default: 30 seconds (if not set, underlying client default is used)
      */
-    private Duration tcpKeepIdle = Duration.ofSeconds(30);
+    private Duration tcpKeepIdle;
 
     /**
      * Time interval between subsequent TCP keep-alive probes.
@@ -242,9 +276,9 @@ class ApacheHttpClientConfigurationProperties {
      * Only applicable when {@code soKeepAlive} is true.
      * 
      * <p>
-     * Default: 5 seconds
+     * Default: 5 seconds (if not set, underlying client default is used)
      */
-    private Duration tcpKeepInterval = Duration.ofSeconds(5);
+    private Duration tcpKeepInterval;
 
     /**
      * Number of failed TCP keep-alive probes before the connection is considered
@@ -262,73 +296,7 @@ class ApacheHttpClientConfigurationProperties {
      * Only applicable when {@code soKeepAlive} is true.
      * 
      * <p>
-     * Default: 3 probes
+     * Default: 3 probes (if not set, underlying client default is used)
      */
-    private int tcpKeepCount = 3;
-
-    /**
-     * Maximum time to wait for a server response.
-     * 
-     * <p>
-     * This timeout applies to:
-     * <ul>
-     * <li>Time waiting for response data to start arriving</li>
-     * <li>Time between consecutive data packets</li>
-     * </ul>
-     * 
-     * <p>
-     * Set this based on:
-     * <ul>
-     * <li>Expected API response times (measure P95/P99 latency)</li>
-     * <li>Network latency between services</li>
-     * <li>Server processing time for the operation</li>
-     * </ul>
-     * 
-     * <p>
-     * <b>What happens if not set or too high:</b>
-     * <ul>
-     * <li>Threads wait indefinitely for slow or hung services</li>
-     * <li>Thread pool exhaustion under load</li>
-     * <li>Application appears frozen or unresponsive</li>
-     * <li>Cascading failures to upstream services</li>
-     * <li>No fast failure - can't implement circuit breakers effectively</li>
-     * </ul>
-     * 
-     * <p>
-     * <b>What happens if too low:</b>
-     * <ul>
-     * <li>Valid requests fail prematurely</li>
-     * <li>Increased error rate and retry storms</li>
-     * <li>False positives in monitoring/alerting</li>
-     * <li>Poor user experience due to unnecessary failures</li>
-     * </ul>
-     * 
-     * <p>
-     * <b>How to set this correctly:</b>
-     * <ol>
-     * <li>Measure your API's actual response time (P99 latency)</li>
-     * <li>Add buffer for network variability (typically 2-3x P99)</li>
-     * <li>For most microservices: 5-15 seconds is appropriate</li>
-     * <li>For slow batch APIs: may need 30-60 seconds</li>
-     * <li>For fast cache/lookup APIs: 1-3 seconds may suffice</li>
-     * <li>Never set lower than your expected normal response time</li>
-     * </ol>
-     * 
-     * <p>
-     * <b>Example scenarios:</b>
-     * <ul>
-     * <li><b>Fast API (cache lookup):</b> P99=200ms → set 1-2s timeout</li>
-     * <li><b>Normal API (database query):</b> P99=500ms → set 5-10s timeout</li>
-     * <li><b>Slow API (complex calculation):</b> P99=5s → set 15-20s timeout</li>
-     * <li><b>Batch API (report generation):</b> P99=30s → set 60-90s timeout</li>
-     * </ul>
-     * 
-     * <p>
-     * If the server doesn't respond within this time, a timeout exception is
-     * thrown.
-     * 
-     * <p>
-     * Default: 5 seconds
-     */
-    private Duration responseTimeout = Duration.ofSeconds(5);
+    private Integer tcpKeepCount;
 }
