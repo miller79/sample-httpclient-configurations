@@ -115,11 +115,14 @@ The `restclient-resttemplate-sample` includes an `application.yaml` file with ex
 ```yaml
 miller79:
   apache:
-    response-timeout: 10s
-    # Additional properties can be configured:
-    # max-connections: 100
-    # max-idle-time: 60s
-    # max-life-time: 120s
+    # ⭐ BEST PRACTICE: Set these two properties for production
+    max-idle-time: 3m        # Close idle connections after 3 minutes
+    max-life-time: 30m       # Replace all connections every 30 minutes
+    
+    # Optional properties (only configure if needed):
+    # max-connections: 50    # Based on peak concurrent requests
+    # 
+    # TCP keep-alive settings (NOT necessary with proper lifecycle settings):
     # so-keep-alive: true
     # tcp-keep-idle: 30s
     # tcp-keep-interval: 5s
@@ -153,15 +156,19 @@ The `webclient-sample` includes an `application.yaml` file with example configur
 ```yaml
 miller79:
   reactor:
-    name: "my-reactor"
-    # Additional properties can be configured:
-    # max-connections: 100
-    # max-idle-time: 60s
-    # max-life-time: 120s
+    # ⭐ BEST PRACTICE: Set these two properties for production
+    max-idle-time: 3m        # Close idle connections after 3 minutes
+    max-life-time: 30m       # Replace all connections every 30 minutes
+    
+    # Optional properties (only configure if needed):
+    # name: my-webclient     # For monitoring/debugging
+    # max-connections: 50    # Reactive apps need FEWER connections
+    # 
+    # TCP keep-alive settings (NOT necessary with proper lifecycle settings):
     # so-keep-alive: true
-    # tcp-keep-idle: 30s
-    # tcp-keep-interval: 5s
-    # tcp-keep-count: 3
+    # tcp-keep-idle: 30s     # ⚠️ Linux/Epoll only
+    # tcp-keep-interval: 5s  # ⚠️ Linux/Epoll only
+    # tcp-keep-count: 3      # ⚠️ Linux/Epoll only
 
 spring:
   security:
