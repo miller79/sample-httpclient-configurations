@@ -36,14 +36,14 @@ import reactor.netty.resources.ConnectionProvider;
  * <p>
  * <b>🔧 How This Configuration Works:</b>
  * <ul>
- * <li><b>Null-Safe:</b> Only applies settings if explicitly configured (preserves
- * Reactor Netty defaults)</li>
- * <li><b>Connection Lifecycle:</b> Uses {@code maxIdleTime} and {@code maxLifeTime}
- * to prevent stale connections</li>
- * <li><b>Platform-Aware:</b> Detects Linux/Epoll vs Windows/NIO for TCP keep-alive
- * (if configured)</li>
- * <li><b>Reactive Efficiency:</b> Non-blocking I/O allows small pool sizes (20-50
- * connections) to handle thousands of concurrent requests</li>
+ * <li><b>Null-Safe:</b> Only applies settings if explicitly configured
+ * (preserves Reactor Netty defaults)</li>
+ * <li><b>Connection Lifecycle:</b> Uses {@code maxIdleTime} and
+ * {@code maxLifeTime} to prevent stale connections</li>
+ * <li><b>Platform-Aware:</b> Detects Linux/Epoll vs Windows/NIO for TCP
+ * keep-alive (if configured)</li>
+ * <li><b>Reactive Efficiency:</b> Non-blocking I/O allows small pool sizes
+ * (20-50 connections) to handle thousands of concurrent requests</li>
  * </ul>
  * 
  * <p>
@@ -86,14 +86,16 @@ import reactor.netty.resources.ConnectionProvider;
  * 
  * <p>
  * <b>🔑 Why TCP Keep-Alive Is NOT Needed:</b><br>
- * With {@code max-idle-time: 3m} and {@code max-life-time: 30m}, connections are
- * regularly cycled. TCP keep-alive was designed for long-lived idle connections
- * (hours), which don't exist in this configuration. Only enable keep-alive for:
+ * With {@code max-idle-time: 3m} and {@code max-life-time: 30m}, connections
+ * are regularly cycled. TCP keep-alive was designed for long-lived idle
+ * connections (hours), which don't exist in this configuration. Only enable
+ * keep-alive for:
  * <ul>
  * <li>WebSockets or Server-Sent Events (long-lived bidirectional streams)</li>
- * <li>Aggressive corporate firewalls that drop idle TCP connections &lt; 3 minutes</li>
- * <li><b>⚠️ Linux/Epoll only:</b> TCP keep-alive options require Epoll transport
- * (not available on Windows/macOS NIO)</li>
+ * <li>Aggressive corporate firewalls that drop idle TCP connections &lt; 3
+ * minutes</li>
+ * <li><b>⚠️ Linux/Epoll only:</b> TCP keep-alive options require Epoll
+ * transport (not available on Windows/macOS NIO)</li>
  * </ul>
  * 
  * <p>
@@ -131,8 +133,9 @@ class ReactorHttpClientConfiguration {
         }
         if (reactorHttpClientConfigurationProperties.getMaxIdleTime() != null) {
             cpBuilder.maxIdleTime(reactorHttpClientConfigurationProperties.getMaxIdleTime());
-            // use same value for background eviction
-            cpBuilder.evictInBackground(reactorHttpClientConfigurationProperties.getMaxIdleTime());
+            // use 1/3 of idleTime for evictInBackground to proactively close idle
+            // connections
+            cpBuilder.evictInBackground(reactorHttpClientConfigurationProperties.getMaxIdleTime().dividedBy(3));
         }
         if (reactorHttpClientConfigurationProperties.getMaxLifeTime() != null) {
             cpBuilder.maxLifeTime(reactorHttpClientConfigurationProperties.getMaxLifeTime());
@@ -149,12 +152,14 @@ class ReactorHttpClientConfiguration {
     }
 
     /**
-     * Creates an HttpClient with custom connection provider and TCP keep-alive settings.
+     * Creates an HttpClient with custom connection provider and TCP keep-alive
+     * settings.
      * 
      * <p>
      * Applies TCP keep-alive options using platform-specific channel options:
      * <ul>
-     * <li><b>Linux (Epoll):</b> Uses EpollChannelOption for optimal native performance</li>
+     * <li><b>Linux (Epoll):</b> Uses EpollChannelOption for optimal native
+     * performance</li>
      * <li><b>Other platforms:</b> Uses standard ChannelOption where available</li>
      * </ul>
      * 
@@ -168,8 +173,8 @@ class ReactorHttpClientConfiguration {
         // Apply SO_KEEPALIVE if configured
         HttpClient clientWithKeepAlive = baseClient;
         if (reactorHttpClientConfigurationProperties.getSoKeepAlive() != null) {
-            clientWithKeepAlive = baseClient.option(ChannelOption.SO_KEEPALIVE,
-                    reactorHttpClientConfigurationProperties.getSoKeepAlive());
+            clientWithKeepAlive = baseClient
+                    .option(ChannelOption.SO_KEEPALIVE, reactorHttpClientConfigurationProperties.getSoKeepAlive());
         }
 
         // Apply platform-specific TCP keep-alive options
@@ -203,8 +208,8 @@ class ReactorHttpClientConfiguration {
 
         // Apply TCP_KEEPCNT: number of failed probes before giving up
         if (reactorHttpClientConfigurationProperties.getTcpKeepCount() != null) {
-            configuredClient = configuredClient.option(EpollChannelOption.TCP_KEEPCNT,
-                    reactorHttpClientConfigurationProperties.getTcpKeepCount());
+            configuredClient = configuredClient
+                    .option(EpollChannelOption.TCP_KEEPCNT, reactorHttpClientConfigurationProperties.getTcpKeepCount());
         }
 
         return configuredClient;
@@ -214,22 +219,26 @@ class ReactorHttpClientConfiguration {
      * Applies NIO-compatible TCP keep-alive options to the HttpClient.
      * 
      * <p>
-     * On non-Linux platforms (Windows, macOS), SO_KEEPALIVE is enabled but fine-grained
-     * control of keep-alive timing (idle, interval, count) is typically not available
-     * through standard Java NIO. These platforms use OS-level defaults.
+     * On non-Linux platforms (Windows, macOS), SO_KEEPALIVE is enabled but
+     * fine-grained control of keep-alive timing (idle, interval, count) is
+     * typically not available through standard Java NIO. These platforms use
+     * OS-level defaults.
      * 
      * <p>
-     * Note: While some platforms may support custom keep-alive timing through native
-     * extensions, this implementation uses the standard cross-platform approach.
+     * Note: While some platforms may support custom keep-alive timing through
+     * native extensions, this implementation uses the standard cross-platform
+     * approach.
      * 
      * @param client the base HttpClient
-     * @return HttpClient (unchanged on most platforms, as NIO doesn't support fine-grained keep-alive tuning)
+     * @return HttpClient (unchanged on most platforms, as NIO doesn't support
+     *         fine-grained keep-alive tuning)
      */
     private HttpClient applyNioKeepAliveOptions(HttpClient client) {
         // NIO on Windows/macOS doesn't expose TCP keep-alive timing parameters
         // SO_KEEPALIVE is already set, which enables keep-alive with OS defaults
         // OS defaults are typically:
-        // - Windows: KeepAliveTime=2hrs, KeepAliveInterval=1sec (configurable via registry)
+        // - Windows: KeepAliveTime=2hrs, KeepAliveInterval=1sec (configurable via
+        // registry)
         // - macOS: TCP_KEEPALIVE=2hrs (configurable via sysctl)
 
         return client;
