@@ -170,9 +170,9 @@ class ReactorHttpClientConfigurationProperties {
      * </ul>
      * 
      * <p>
-     * Default: 64 connections (if not set, underlying client default is used)
+     * Default: 500 connections (if not set, underlying client default is used)
      */
-    private Integer maxConnections;
+    private Integer maxConnections = 500;
 
     /**
      * Maximum time a connection can remain idle before being evicted.
