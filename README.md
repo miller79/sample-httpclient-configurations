@@ -113,38 +113,61 @@ Both samples support externalized configuration via `application.yaml` or `appli
 The `restclient-resttemplate-sample` includes an `application.yaml` file with example configuration:
 
 ```yaml
-miller79:
-  apache:
-    # ⭐ BEST PRACTICE: Set these two properties for production
-    max-idle-time: 3m        # Close idle connections after 3 minutes
-    max-life-time: 30m       # Replace all connections every 30 minutes
-    
-    # Optional properties (only configure if needed):
-    # max-connections: 50    # Based on peak concurrent requests
-    # 
-    # TCP keep-alive settings (NOT necessary with proper lifecycle settings):
-    # so-keep-alive: true
-    # tcp-keep-idle: 30s
-    # tcp-keep-interval: 5s
-    # tcp-keep-count: 3
-
 spring:
+  # OAuth2 (client_credentials) example using a token provider (issuer-uri) and
+  # a service account registration. Replace environment variables with real
+  # values in your deployment or use a spring profile file for local testing.
   security:
     oauth2:
       client:
         provider:
           serviceAccount:
+            # URL of the OpenID Connect issuer that provides tokens (example default)
             issuer-uri: ${ISSUER_URI:https://accounts.google.com}
         registration:
           serviceAccount:
+            # Client credentials (recommended: supply via env vars or secret manager)
             client-id: ${CLIENT_ID}
             client-secret: ${CLIENT_SECRET}
             authorization-grant-type: client_credentials
+
+  # Blocking HTTP client configuration
   http:
     client:
+      # Select the Spring-provided HttpComponents (Apache HttpClient 5) factory
       factory: http-components
-      read-timeout: 17s
-      connect-timeout: 16s
+      # Common timeout examples (uncomment and tune based on your API SLAs):
+      # read-timeout: 3m     # Maximum time to wait for a response after request is sent
+      # connect-timeout: 3m  # Time to establish TCP connection to the server
+
+miller79:
+  apache:
+    # ⭐ BEST PRACTICE: Connection lifecycle settings prevent stale connections
+    # These values work for 95% of production applications
+    
+    max-idle-time: 3m
+    # 💡 3-4 minutes is optimal for most apps
+    # - Short enough to clean up idle connections regularly
+    # - Long enough to benefit from connection pooling
+    # - Shorter than typical server/LB timeouts (5-10 min)
+    
+    max-life-time: 30m
+    # 💡 5-30 minutes forces connection rotation
+    # - 5-10 min: Dynamic environments (Kubernetes, frequent deploys)
+    # - 15-30 min: Stable infrastructure
+    # - Ensures DNS changes and LB updates are picked up
+    
+    # 🔑 With the above settings, TCP keep-alive is NOT necessary!
+    # Only enable keep-alive for special cases:
+    # - Long-lived persistent connections (WebSockets, SSE)
+    # - Aggressive firewall environments that close connections < 3 min
+    
+    # Uncomment only if needed:
+    # max-connections: 50           # Based on peak concurrent requests
+    # so-keep-alive: true           # Only for special cases (see above)
+    # tcp-keep-idle: 30s            # Time before first keep-alive probe
+    # tcp-keep-interval: 10s        # Time between probes
+    # tcp-keep-count: 3             # Failed probes before connection is dead
 ```
 
 **Note:** The example uses environment variables (`${CLIENT_ID}`, `${CLIENT_SECRET}`, `${ISSUER_URI}`) for sensitive OAuth2 credentials. These should be set in your environment or replaced with actual values.
@@ -154,23 +177,9 @@ spring:
 The `webclient-sample` includes an `application.yaml` file with example configuration:
 
 ```yaml
-miller79:
-  reactor:
-    # ⭐ BEST PRACTICE: Set these two properties for production
-    max-idle-time: 3m        # Close idle connections after 3 minutes
-    max-life-time: 30m       # Replace all connections every 30 minutes
-    
-    # Optional properties (only configure if needed):
-    # name: my-webclient     # For monitoring/debugging
-    # max-connections: 50    # Reactive apps need FEWER connections
-    # 
-    # TCP keep-alive settings (NOT necessary with proper lifecycle settings):
-    # so-keep-alive: true
-    # tcp-keep-idle: 30s     # ⚠️ Linux/Epoll only
-    # tcp-keep-interval: 5s  # ⚠️ Linux/Epoll only
-    # tcp-keep-count: 3      # ⚠️ Linux/Epoll only
-
 spring:
+  # OAuth2 client (client_credentials) example. Provide real values via environment
+  # variables or a profile-specific YAML during deployment.
   security:
     oauth2:
       client:
@@ -182,11 +191,44 @@ spring:
             client-id: ${CLIENT_ID}
             client-secret: ${CLIENT_SECRET}
             authorization-grant-type: client_credentials
+
+  # Reactive HTTP client section (WebClient / Reactor Netty connector)
   http:
     reactiveclient:
+      # Choose the Reactor Netty connector (default for reactive clients in this sample)
       connector: reactor
-      connect-timeout: 16s
-      read-timeout: 17s
+      # Example timeouts (uncomment to enable):
+      # connect-timeout: 3m   # Time to establish TCP connection (Reactor Netty optional)
+      # read-timeout: 3m      # Maximum time to wait for read data on an established connection
+
+miller79:
+  reactor:
+    # ⭐ BEST PRACTICE: Connection lifecycle settings prevent stale connections
+    # These values work for 95% of production applications
+    
+    max-idle-time: 3m
+    # 💡 3-4 minutes is optimal for most apps
+    # - Short enough to clean up idle connections regularly
+    # - Long enough to benefit from connection pooling
+    # - Shorter than typical server/LB timeouts (5-10 min)
+    
+    max-life-time: 30m
+    # 💡 5-30 minutes forces connection rotation
+    # - 5-10 min: Dynamic environments (Kubernetes, frequent deploys)
+    # - 15-30 min: Stable infrastructure
+    # - Ensures DNS changes and LB updates are picked up
+    
+    # 🔑 With the above settings, TCP keep-alive is NOT necessary!
+    # Only enable keep-alive for special cases:
+    # - Long-lived persistent connections (WebSockets, SSE)
+    # - Aggressive firewall environments that close connections < 3 min
+    
+    # Uncomment only if needed:
+    # max-connections: 20           # Reactive needs fewer connections than blocking
+    # so-keep-alive: true           # Only for special cases (see above)
+    # tcp-keep-idle: 30s            # Linux/Epoll only - time before first probe
+    # tcp-keep-interval: 10s        # Linux/Epoll only - time between probes
+    # tcp-keep-count: 3             # Linux/Epoll only - failed probes before dead
 ```
 
 **Note:** The example uses environment variables for OAuth2 credentials. The `issuer-uri` property automatically configures the token endpoint and other OAuth2 details.
