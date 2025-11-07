@@ -108,200 +108,52 @@ The `webclient-sample` demonstrates how to configure:
 
 Both samples support externalized configuration via `application.yaml` or `application.properties`.
 
-### Apache HttpClient Example (application.yaml)
+### Configuration Examples
 
-The `restclient-resttemplate-sample` includes an `application.yaml` file with example configuration:
+Both samples include `application.yaml` files. See the actual files for complete configuration with detailed comments.
 
+**Apache HttpClient (restclient-resttemplate-sample):**
 ```yaml
 spring:
-  # OAuth2 (client_credentials) example using a token provider (issuer-uri) and
-  # a service account registration. Replace environment variables with real
-  # values in your deployment or use a spring profile file for local testing.
-  security:
-    oauth2:
-      client:
-        provider:
-          serviceAccount:
-            # URL of the OpenID Connect issuer that provides tokens (example default)
-            issuer-uri: ${ISSUER_URI:https://accounts.google.com}
-        registration:
-          serviceAccount:
-            # Client credentials (recommended: supply via env vars or secret manager)
-            client-id: ${CLIENT_ID}
-            client-secret: ${CLIENT_SECRET}
-            authorization-grant-type: client_credentials
-
-  # Blocking HTTP client configuration
   http:
     client:
-      # Select the Spring-provided HttpComponents (Apache HttpClient 5) factory
       factory: http-components
-      # Common timeout examples (uncomment and tune based on your API SLAs):
-      # read-timeout: 3m     # Maximum time to wait for a response after request is sent
-      # connect-timeout: 3m  # Time to establish TCP connection to the server
+      # read-timeout: 3m     # Uncomment and tune based on your API SLAs
+      # connect-timeout: 3m
 
 miller79:
   apache:
-    # ⭐ BEST PRACTICE: Connection lifecycle settings prevent stale connections
-    # These values work for 95% of production applications
-    
-    max-idle-time: 3m
-    # 💡 3-4 minutes is optimal for most apps
-    # - Short enough to clean up idle connections regularly
-    # - Long enough to benefit from connection pooling
-    # - Shorter than typical server/LB timeouts (5-10 min)
-    
-    max-life-time: 30m
-    # 💡 5-30 minutes forces connection rotation
-    # - 5-10 min: Dynamic environments (Kubernetes, frequent deploys)
-    # - 15-30 min: Stable infrastructure
-    # - Ensures DNS changes and LB updates are picked up
-    
-    # 🔑 With the above settings, TCP keep-alive is NOT necessary!
-    # Only enable keep-alive for special cases:
-    # - Long-lived persistent connections (WebSockets, SSE)
-    # - Aggressive firewall environments that close connections < 3 min
-    
-    # Uncomment only if needed:
-    # max-connections: 50           # Based on peak concurrent requests
-    # so-keep-alive: true           # Only for special cases (see above)
-    # tcp-keep-idle: 30s            # Time before first keep-alive probe
-    # tcp-keep-interval: 10s        # Time between probes
-    # tcp-keep-count: 3             # Failed probes before connection is dead
+    max-idle-time: 3m        # ⭐ Clean up idle connections regularly
+    max-life-time: 30m       # ⭐ Force connection rotation for DNS/LB changes
+    # max-connections: 50    # Uncomment if needed
 ```
 
-**Note:** The example uses environment variables (`${CLIENT_ID}`, `${CLIENT_SECRET}`, `${ISSUER_URI}`) for sensitive OAuth2 credentials. These should be set in your environment or replaced with actual values.
-
-### Reactor Netty Example (application.yaml)
-
-The `webclient-sample` includes an `application.yaml` file with example configuration:
-
+**Reactor Netty (webclient-sample):**
 ```yaml
 spring:
-  # OAuth2 client (client_credentials) example. Provide real values via environment
-  # variables or a profile-specific YAML during deployment.
-  security:
-    oauth2:
-      client:
-        provider:
-          serviceAccount:
-            issuer-uri: ${ISSUER_URI:https://accounts.google.com}
-        registration:
-          serviceAccount:
-            client-id: ${CLIENT_ID}
-            client-secret: ${CLIENT_SECRET}
-            authorization-grant-type: client_credentials
-
-  # Reactive HTTP client section (WebClient / Reactor Netty connector)
   http:
     reactiveclient:
-      # Choose the Reactor Netty connector (default for reactive clients in this sample)
       connector: reactor
-      # Example timeouts (uncomment to enable):
-      # connect-timeout: 3m   # Time to establish TCP connection (Reactor Netty optional)
-      # read-timeout: 3m      # Maximum time to wait for read data on an established connection
+      # connect-timeout: 3m  # Uncomment if needed
 
 miller79:
   reactor:
-    # ⭐ BEST PRACTICE: Connection lifecycle settings prevent stale connections
-    # These values work for 95% of production applications
-    
-    max-idle-time: 3m
-    # 💡 3-4 minutes is optimal for most apps
-    # - Short enough to clean up idle connections regularly
-    # - Long enough to benefit from connection pooling
-    # - Shorter than typical server/LB timeouts (5-10 min)
-    
-    max-life-time: 30m
-    # 💡 5-30 minutes forces connection rotation
-    # - 5-10 min: Dynamic environments (Kubernetes, frequent deploys)
-    # - 15-30 min: Stable infrastructure
-    # - Ensures DNS changes and LB updates are picked up
-    
-    # 🔑 With the above settings, TCP keep-alive is NOT necessary!
-    # Only enable keep-alive for special cases:
-    # - Long-lived persistent connections (WebSockets, SSE)
-    # - Aggressive firewall environments that close connections < 3 min
-    
-    # Uncomment only if needed:
-    # max-connections: 20           # Reactive needs fewer connections than blocking
-    # so-keep-alive: true           # Only for special cases (see above)
-    # tcp-keep-idle: 30s            # Linux/Epoll only - time before first probe
-    # tcp-keep-interval: 10s        # Linux/Epoll only - time between probes
-    # tcp-keep-count: 3             # Linux/Epoll only - failed probes before dead
+    max-idle-time: 3m        # ⭐ Clean up idle connections regularly
+    max-life-time: 30m       # ⭐ Force connection rotation for DNS/LB changes
+    # max-connections: 20    # Uncomment if needed (reactive needs fewer)
 ```
 
-**Note:** The example uses environment variables for OAuth2 credentials. The `issuer-uri` property automatically configures the token endpoint and other OAuth2 details.
+**Note:** Both samples include OAuth2 client credentials support. See the actual `application.yaml` files for the complete OAuth2 configuration using environment variables.
 
-### OAuth2 Client Credentials Configuration (Optional)
+### OAuth2 Client Credentials (Optional)
 
-**For RestClient/RestTemplate (Blocking):**
+Both samples include OAuth2 client credentials support using `issuer-uri` auto-discovery. The configuration uses environment variables (`CLIENT_ID`, `CLIENT_SECRET`, `ISSUER_URI`) for security. See the `application.yaml` files and `SecurityConfiguration.java` in each sample for details.
 
-The `restclient-resttemplate-sample` includes OAuth2 client credentials authentication support in the `application.yaml` file. The OAuth2 configuration uses environment variables for security:
-
-```yaml
-spring:
-  security:
-    oauth2:
-      client:
-        provider:
-          serviceAccount:
-            issuer-uri: ${ISSUER_URI:https://accounts.google.com}
-        registration:
-          serviceAccount:
-            client-id: ${CLIENT_ID}
-            client-secret: ${CLIENT_SECRET}
-            authorization-grant-type: client_credentials
-            # Optional: scope: api.read,api.write
-```
-
-**Environment Variables:**
-- `ISSUER_URI` - OAuth2 provider issuer URI (defaults to Google if not set)
-- `CLIENT_ID` - Your OAuth2 client ID
-- `CLIENT_SECRET` - Your OAuth2 client secret
-
-This configuration enables:
-- **Automatic Token Management**: OAuth2 tokens are automatically obtained and refreshed
-- **Token Caching**: Tokens are cached and reused until expiration
-- **Configured HTTP Client**: Token requests use the same customized Apache HttpClient settings
-- **Service-to-Service Auth**: Ideal for microservice authentication scenarios
-- **Issuer URI Discovery**: Automatically discovers token endpoint from issuer URI
-
-The OAuth2 setup is handled by `SecurityConfiguration.java`, which provides:
-- `sampleRestClientWithAuth` - RestClient with OAuth2 bearer token authentication
-- `sampleRestTemplateWithAuth` - RestTemplate with OAuth2 bearer token authentication
-
-**For WebClient (Reactive):**
-
-The `webclient-sample` also includes reactive OAuth2 client credentials authentication support in the `application.yaml` file. The configuration is identical:
-
-```yaml
-spring:
-  security:
-    oauth2:
-      client:
-        provider:
-          serviceAccount:
-            issuer-uri: ${ISSUER_URI:https://accounts.google.com}
-        registration:
-          serviceAccount:
-            client-id: ${CLIENT_ID}
-            client-secret: ${CLIENT_SECRET}
-            authorization-grant-type: client_credentials
-            # Optional: scope: api.read,api.write
-```
-
-This configuration enables reactive OAuth2 features:
-- **Non-Blocking Token Acquisition**: OAuth2 tokens are obtained asynchronously without blocking threads
-- **Reactive Token Management**: Token refresh happens as part of the reactive pipeline
-- **Token Caching**: Tokens are cached reactively and reused until expiration
-- **Configured HTTP Client**: Token requests use the same customized Reactor Netty settings
-- **Issuer URI Discovery**: Automatically discovers token endpoint from issuer URI
-
-The reactive OAuth2 setup is handled by `SecurityConfiguration.java` (in webclient-sample), which provides:
-- `sampleWebClientWithAuth` - WebClient with reactive OAuth2 bearer token authentication
-
-**Key Difference:** The RestClient/RestTemplate OAuth2 implementation uses blocking interceptors, while the WebClient implementation uses reactive filter functions that work with Project Reactor's Mono/Flux types.
+**Key features:**
+- Automatic token management and caching
+- Token requests use the same configured HTTP client
+- Blocking implementation (RestClient/RestTemplate) uses interceptors
+- Reactive implementation (WebClient) uses filter functions
 
 ## Why This Matters
 
@@ -363,110 +215,35 @@ When downstream services have issues:
 
 ### Recommended Starting Points
 
-These values are reasonable defaults for most microservice-to-microservice communication. **Always tune based on your actual measured latencies and SLAs.**
-
-**⭐ Best Practice for Production:**
-
-For production environments, use these recommended connection lifecycle settings:
+**⭐ Production Best Practice:**
 
 ```yaml
 miller79:
   apache:  # or reactor for WebClient
-    max-idle-time: 3m        # 3-4 minutes - Clean up idle connections regularly
-    max-life-time: 30m       # 5-30 minutes - Force connection rotation for DNS/LB changes
+    max-idle-time: 3m        # Clean up idle connections regularly
+    max-life-time: 30m       # Force connection rotation for DNS/LB changes
 ```
 
-**Why these values?**
-- **max-idle-time: 3-4 minutes** - Balances connection reuse with resource cleanup. Shorter than most server/load balancer timeouts, preventing stale connection issues while still allowing effective pooling during normal traffic.
-- **max-life-time: 5-30 minutes** - Forces periodic connection rotation to pick up DNS changes, load balancer updates, and rolling deployments. Use shorter values (5-10min) in dynamic environments like Kubernetes, longer values (20-30min) in stable infrastructure.
+- **max-idle-time: 3-4 minutes** - Prevents stale connections while allowing connection pooling benefits
+- **max-life-time: 5-30 minutes** - Forces connection rotation (5-10min for Kubernetes, 15-30min for stable infrastructure)
 
-**🔑 Important:** With properly configured `max-idle-time` and `max-life-time`, **TCP keep-alive settings are not necessary** for most applications. These connection lifecycle settings already prevent stale connections by proactively closing and refreshing them. TCP keep-alive is only needed for very long-lived idle connections (e.g., persistent websockets, streaming APIs) or environments with aggressive intermediate firewalls that close idle connections faster than your lifecycle settings.
+**🔑 Important:** With proper lifecycle settings, **TCP keep-alive is not needed** for typical REST APIs. Only required for WebSockets, SSE, or aggressive firewalls.
 
-**For Blocking Clients (Apache HttpClient):**
-```yaml
-spring:
-  http:
-    client:
-      connect-timeout: 5s      # TCP connection establishment (typically very fast)
-      read-timeout: 15s        # Time to wait for response data (depends on API speed)
+### Key Tuning Principles
 
-miller79:
-  apache:
-    max-connections: 50        # Size based on concurrent request needs (start conservative)
-    max-idle-time: 3m          # ⭐ Best practice: 3-4 minutes
-    max-life-time: 30m         # ⭐ Best practice: 5-30 minutes based on environment
-    # TCP keep-alive NOT needed with proper lifecycle settings:
-    # so-keep-alive: true      
-    # tcp-keep-idle: 30s       
-    # tcp-keep-interval: 10s   
-    # tcp-keep-count: 3        
-```
+1. **Connection Lifecycle** - `max-idle-time: 3-4m` and `max-life-time: 5-30m` prevent stale connections
+2. **Response Timeout** - Set based on your API's P99 latency + buffer (typically 2-3x P99)
+3. **Pool Size** - Blocking clients: match peak concurrency; Reactive: 5-20 connections handles hundreds of streams
+4. **TCP Keep-Alive** - Not needed with proper lifecycle settings (only for WebSockets/SSE)
+5. **Fail Fast** - Use short timeouts (5-10s connect, SLA-based read) at every layer
 
-**For Reactive Clients (Reactor Netty):**
-```yaml
-spring:
-  http:
-    reactiveclient:
-      connect-timeout: 5s      # TCP connection establishment
-      # Note: read-timeout works differently in reactive - often not needed
+### Common Mistakes
 
-miller79:
-  reactor:
-    name: "my-service"         # Helpful for monitoring multiple clients
-    max-connections: 20        # Smaller than blocking (non-blocking I/O is efficient)
-    max-idle-time: 3m          # ⭐ Best practice: 3-4 minutes
-    max-life-time: 30m         # ⭐ Best practice: 5-30 minutes based on environment
-    # TCP keep-alive NOT needed with proper lifecycle settings:
-    # so-keep-alive: true      
-    # tcp-keep-idle: 30s       # Linux/Epoll only
-    # tcp-keep-interval: 10s   # Linux/Epoll only  
-    # tcp-keep-count: 3        # Linux/Epoll only
-```
-
-### Key Principles for Tuning
-
-**1. Connection Lifecycle is Critical for Production Reliability**
-- **max-idle-time: 3-4 minutes** is the sweet spot for most applications
-  - Short enough to prevent stale connections accumulating
-  - Long enough to benefit from connection pooling during normal traffic
-  - Shorter than typical server/load balancer idle timeouts (5-10 minutes)
-- **max-life-time: 5-30 minutes** ensures regular connection rotation
-  - Use 5-10 minutes in dynamic environments (Kubernetes, frequent deployments)
-  - Use 15-30 minutes in stable infrastructure
-  - Always shorter than your DNS TTL to pick up infrastructure changes
-- **With proper lifecycle settings, TCP keep-alive is unnecessary** for typical REST APIs
-
-**2. Response Timeout Should Reflect Your SLA**
-- Measure your P99 latency for the target API
-- Add buffer for network variability (typically 2-3x P99)
-- Never set it lower than your expected normal response time
-- Consider different timeouts for different APIs (fast vs. slow endpoints)
-
-**3. Connection Pool Size = Expected Concurrency**
-- **Blocking clients**: Size for peak concurrent outbound requests
-- **Reactive clients**: Can be much smaller (5-20 connections can handle hundreds of concurrent reactive streams)
-- Monitor pool exhaustion metrics and scale up if needed
-- Avoid over-sizing: large pools consume memory and file descriptors
-
-**4. TCP Keep-Alive Only for Special Cases**
-- **Not needed** when using proper `max-idle-time` and `max-life-time` settings
-- **Use only for:** Long-lived persistent connections (websockets, SSE), or aggressive firewall environments
-- **Note:** Linux/Epoll only for Reactor Netty - degrades gracefully on other platforms
-
-**5. Fail Fast and Clearly**
-- Short connect timeout (5-10s) for faster failure detection
-- Response timeout based on your service SLA
-- Use bounded timeouts at every layer (client → gateway → service)
-
-### Common Mistakes to Avoid
-
-❌ **Setting timeouts too high** - "Let's set 60s to be safe" defeats the purpose; you'll still exhaust resources  
-❌ **No timeout at all** - Relying on defaults means indefinite waits in most cases  
-❌ **Same timeout for all services** - Fast APIs and slow batch APIs need different timeouts  
-❌ **Ignoring connection lifecycle** - Leads to stale connection accumulation over days/weeks  
-❌ **Over-sized connection pools** - Wastes resources and can overwhelm downstream services  
-❌ **Under-sized connection pools** - Causes pool exhaustion and request queuing  
-❌ **Not monitoring timeout metrics** - Can't tune without visibility into actual behavior
+❌ Timeouts too high (defeats the purpose) or missing entirely (indefinite waits)  
+❌ Same timeout for all services (fast vs. slow APIs need different values)  
+❌ Ignoring connection lifecycle (stale connections accumulate)  
+❌ Wrong pool size (too large wastes resources, too small causes exhaustion)  
+❌ Not monitoring metrics (can't tune without visibility)
 
 ## Key Considerations
 
@@ -495,181 +272,34 @@ Timeouts should be configured in a cascading manner:
 - Evict idle connections to free resources
 - TCP keep-alive options are platform-specific (Linux only for some settings)
 
-## Troubleshooting Common Issues
+## Troubleshooting
 
-### Problem: "Connection pool shut down" or "Connection pool exhausted"
+### Common Problems & Solutions
 
-**Symptom:** Application logs show connection pool errors, requests are rejected or queued
+| Problem | Symptom | Solution |
+|---------|---------|----------|
+| **Pool exhausted** | Connection pool errors, requests rejected | Increase `max-connections` or reduce `read-timeout` |
+| **Read timeout** | SocketTimeoutException | Increase `read-timeout` or optimize downstream service |
+| **Connection reset** | NoHttpResponseException, random failures | Reduce `max-life-time` and `max-idle-time` |
+| **Hangs indefinitely** | Threads stuck, app frozen | Set explicit `connect-timeout` and `read-timeout` |
+| **Memory/file descriptor leak** | Memory grows, too many open files | Enable `max-idle-time` and `max-life-time` |
+| **Stale DNS** | Requests to old servers after changes | Set `max-life-time` < DNS TTL (e.g., 60s) |
+| **Intermittent failures** | First request after idle fails | Reduce `max-idle-time` or add retry logic |
 
-**Root Cause:** All connections in the pool are in use, and new requests cannot acquire a connection
+### Debugging
 
-**Solutions:**
-1. **Increase pool size** if you have legitimate high concurrency:
-   ```yaml
-   miller79:
-     apache:
-       max-connections: 100  # or higher based on need
-   ```
-2. **Check for connection leaks** - Ensure you're not holding connections without releasing them
-3. **Reduce response timeout** if requests are waiting too long on slow services
-4. **Monitor pool metrics** to understand actual usage patterns
-
----
-
-### Problem: "SocketTimeoutException: Read timed out"
-
-**Symptom:** Requests fail with socket timeout exceptions after a fixed period
-
-**Root Cause:** Server took longer than `read-timeout` or `response-timeout` to send response
-
-**Solutions:**
-1. **Increase timeout** if the API legitimately takes longer:
-   ```yaml
-   spring:
-     http:
-       client:
-         read-timeout: 30s  # Increase based on API behavior
-   ```
-2. **Optimize the downstream service** if it's slower than your SLA
-3. **Use async patterns** (reactive) if you need to handle long-running operations
-4. **Implement retry logic** with exponential backoff for transient failures
-
----
-
-### Problem: "NoHttpResponseException" or "Connection reset"
-
-**Symptom:** Random failures with "connection reset" or "no HTTP response" errors
-
-**Root Cause:** Using a stale connection that the server or load balancer already closed
-
-**Solutions:**
-1. **Reduce connection TTL** to refresh connections more frequently:
-   ```yaml
-   miller79:
-     apache:
-       max-life-time: 30s  # Force connection refresh
-       max-idle-time: 20s  # Evict idle connections sooner
-   ```
-2. **Enable connection validation** (already enabled in these samples via `validate-after-inactivity`)
-3. **Ensure TTL < server timeout** (check your server/LB keep-alive timeout)
-4. **Enable TCP keep-alive** to detect broken connections early
-
----
-
-### Problem: Requests hang indefinitely / Application becomes unresponsive
-
-**Symptom:** Requests never complete, threads are stuck in WAITING state, application appears frozen
-
-**Root Cause:** No timeout configured, waiting forever for a response from an unresponsive service
-
-**Solutions:**
-1. **Set explicit timeouts** - Never rely on defaults:
-   ```yaml
-   spring:
-     http:
-       client:
-         connect-timeout: 5s
-         read-timeout: 15s
-   miller79:
-     apache:
-       response-timeout: 15s
-   ```
-2. **Use thread dumps** to identify which downstream call is hanging
-3. **Implement circuit breakers** (Resilience4j) to fail fast when services are down
-4. **Add request-level timeouts** in your service layer as a last line of defense
-
----
-
-### Problem: High memory usage or too many open file descriptors
-
-**Symptom:** Application memory grows over time, OS reports too many open files
-
-**Root Cause:** Connections not being evicted, accumulating idle connections in the pool
-
-**Solutions:**
-1. **Enable idle eviction** (already configured in these samples):
-   ```yaml
-   miller79:
-     apache:
-       max-idle-time: 30s
-   ```
-2. **Reduce connection pool size** if it's unnecessarily large
-3. **Set max-life-time** to force connection refresh:
-   ```yaml
-   miller79:
-     apache:
-       max-life-time: 60s
-   ```
-4. **Monitor connection metrics** using Spring Boot Actuator or APM tools
-
----
-
-### Problem: DNS changes not picked up (requests go to old servers)
-
-**Symptom:** After infrastructure changes, some requests still route to decommissioned servers
-
-**Root Cause:** Long-lived connections bypass DNS resolution
-
-**Solutions:**
-1. **Set connection max-life-time** to force periodic reconnection:
-   ```yaml
-   miller79:
-     apache:
-       max-life-time: 60s  # Force DNS re-resolution every 60s
-   ```
-2. **Use service mesh** (like Istio) for service discovery instead of DNS
-3. **Implement client-side load balancing** (Spring Cloud LoadBalancer)
-
----
-
-### Problem: Intermittent failures after deployments or during low traffic
-
-**Symptom:** First request after idle period fails, subsequent requests succeed
-
-**Root Cause:** Stale connections in pool were closed by server/LB during idle time
-
-**Solutions:**
-1. **Reduce max-idle-time** to evict idle connections sooner:
-   ```yaml
-   miller79:
-     apache:
-       max-idle-time: 20s
-   ```
-2. **Enable connection validation** before reuse (configured via `validate-after-inactivity` in these samples)
-3. **Implement retry logic** in your application to handle first-request failures gracefully
-
----
-
-### Debugging Tips
-
-**Enable HTTP client debug logging:**
+**Enable debug logging:**
 ```yaml
 logging:
   level:
     org.apache.hc.client5: DEBUG          # Apache HttpClient
     reactor.netty.http.client: DEBUG       # Reactor Netty
-    org.springframework.web.reactive: DEBUG  # Spring WebClient
 ```
 
-**Use Spring Boot Actuator metrics:**
-```yaml
-management:
-  endpoints:
-    web:
-      exposure:
-        include: metrics,health
-  metrics:
-    enable:
-      http.client.requests: true
-```
-
-**Monitor these key metrics:**
-- Connection pool active connections
-- Connection pool idle connections  
-- Connection pool pending acquisitions
-- Request timeout rate
-- Connection failure rate
-- P50, P95, P99 response times
+**Monitor key metrics** (via Spring Boot Actuator):
+- Connection pool: active, idle, pending acquisitions
+- Request: timeout rate, failure rate
+- Latency: P50, P95, P99 response times
 
 ## Running the Samples
 
