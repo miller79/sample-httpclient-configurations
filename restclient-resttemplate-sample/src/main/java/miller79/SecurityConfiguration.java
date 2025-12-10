@@ -104,7 +104,7 @@ class SecurityConfiguration {
         // from Spring Security currently
         // https://github.com/spring-projects/spring-security/issues/16731
         restClientClientCredentialsTokenResponseClient
-                .setRestClient(RestClient.builder().messageConverters((messageConverters) -> {
+                .setRestClient(restClientBuilder.messageConverters((messageConverters) -> {
                     messageConverters.clear();
                     messageConverters.add(new FormHttpMessageConverter());
                     messageConverters.add(new OAuth2AccessTokenResponseHttpMessageConverter());
